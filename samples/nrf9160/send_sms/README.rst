@@ -19,7 +19,8 @@ Overview
 
 Requirements
 ************
-* nRF9160 DK
+- nRF9160 DK
+- SIM Card capable of sending SMS, I used a Verizon SIM in my testing **(Included iBasis eSIM with DK does not support SMS natively)**
 
 Running
 *******
