@@ -13,13 +13,15 @@ Overview
 
 3) Send the message "Hello from Nordic" to +16464007658, SMSC = NULL: `AT+CMGS`_\=29\\r0001000B916164047056F8000012C8329BFD0699E5EF36C8F99693D3E310\\x1A
 
-- Payload can be changed by using the tool here: http://rednaxela.net/pdu.php
-
 .. _AT+CFUN: https://infocenter.nordicsemi.com/topic/ref_at_commands/REF/at_commands/mob_termination_ctrl_status/cfun_set.html
 .. _AT+CNMI: https://infocenter.nordicsemi.com/topic/ref_at_commands/REF/at_commands/text_mode/cnmi_set.html
 .. _AT+CMGS: https://infocenter.nordicsemi.com/topic/ref_at_commands/REF/at_commands/text_mode/cmgs_set.html
 
 Requirements
 ************
-
 * nRF9160 DK
+
+Notes
+*****
+- Payload for SMS can be changed by using the tool here: http://rednaxela.net/pdu.php
+- +16464007658 can be used for free on https://receive-smss.com/sms/16464007658/
