@@ -3,10 +3,21 @@
 nRF9160: Send SMS
 ##################
 
-The Send SMS example demonstrates how to send an SMS from the nRF9160 modem.
+The Send SMS example demonstrates how to send an SMS from the nRF9160 modem using the AT+CMGS command.
 
 Overview
 ********
+1) Initiate the modem: `AT+CFUN`_\=1
+
+2) Register modem as a client for mobile-terminated SMS and status reports: `AT+CNMI`_\=3,2,0,1
+
+3) Send the message "Hello from Nordic" to +16464007658, SMSC = NULL: `AT+CMGS`_\=29\\r0001000B916164047056F8000012C8329BFD0699E5EF36C8F99693D3E310\\x1A
+
+- Payload can be changed by using the tool here: http://rednaxela.net/pdu.php
+
+.. _AT+CFUN: https://infocenter.nordicsemi.com/topic/ref_at_commands/REF/at_commands/mob_termination_ctrl_status/cfun_set.html
+.. _AT+CNMI: https://infocenter.nordicsemi.com/topic/ref_at_commands/REF/at_commands/text_mode/cnmi_set.html
+.. _AT+CMGS: https://infocenter.nordicsemi.com/topic/ref_at_commands/REF/at_commands/text_mode/cmgs_set.html
 
 Requirements
 ************
