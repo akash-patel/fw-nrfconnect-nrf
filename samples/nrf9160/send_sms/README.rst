@@ -24,11 +24,9 @@ Requirements
 
 Running
 *******
-This example can be run on the nRF9160 DK using the pre-built merged.hex file. Make sure that the programming switch (SW5) is set to nRF91 on the DK and run the following commands:
+This example can be run on the nRF9160 DK using the pre-built merged.hex file. Make sure that the programming switch (SW5) is set to nRF91 on the DK and run the following command:
 
-- `nrfjprog`_ -e
-
-- `nrfjprog`_ --program merged.hex --verify -r
+`nrfjprog`_ --program merged.hex --sectorerase --verify -r
 
 .. _nrfjprog: https://www.nordicsemi.com/Software-and-Tools/Development-Tools/nRF-Command-Line-Tools
 
