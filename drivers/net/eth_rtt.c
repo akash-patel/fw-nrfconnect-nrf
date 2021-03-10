@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 /**
@@ -45,7 +45,8 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include <net/net_if.h>
 #include <net/net_core.h>
 #include <net/ethernet.h>
-#include <crc.h>
+#include <sys/crc.h>
+#include <random/rand32.h>
 #include <SEGGER_RTT.h>
 
 /** RTT channel name used to identify Ethernet transfer channel. */
@@ -69,7 +70,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #define ACTIVE_POLL_COUNT (CONFIG_ETH_POLL_PERIOD_MS / \
 			   CONFIG_ETH_POLL_ACTIVE_PERIOD_MS)
 
-BUILD_ASSERT_MSG(CONFIG_ETH_RTT_CHANNEL < SEGGER_RTT_MAX_NUM_UP_BUFFERS,
+BUILD_ASSERT(CONFIG_ETH_RTT_CHANNEL < SEGGER_RTT_MAX_NUM_UP_BUFFERS,
 		 "RTT channel number used in RTT network driver "
 		 "must be lower than SEGGER_RTT_MAX_NUM_UP_BUFFERS");
 
@@ -85,35 +86,35 @@ struct eth_rtt_context {
 	/** Counter that counts down number of polls that must be done before
 	 *  assuming that transfer is not running for now.
 	 */
-	u16_t active_poll_counter;
+	uint16_t active_poll_counter;
 
 	/** CRC of currently sending frame to RTT. */
-	u16_t crc;
+	uint16_t crc;
 
 	/** MAC address of this interface. */
-	u8_t mac_addr[6];
+	uint8_t mac_addr[6];
 
 	/** Buffer that contains currently receiving frame from RTT. Frame
 	 *  contained in the buffer is partial and as soon as it gets finalized
 	 *  it will be send to the network stack and removed from the buffer.
 	 *  Data in the buffer are already SLIP decoded.
 	 */
-	u8_t rx_buffer[RX_BUFFER_SIZE];
+	uint8_t rx_buffer[RX_BUFFER_SIZE];
 
 	/** Number of bytes currently occupied in rx_buffer. */
 	size_t rx_buffer_length;
 
 	/** Up buffer used by RTT library */
-	u8_t rtt_up_buffer[CONFIG_ETH_RTT_UP_BUFFER_SIZE];
+	uint8_t rtt_up_buffer[CONFIG_ETH_RTT_UP_BUFFER_SIZE];
 
 	/** Down buffer used by RTT library */
-	u8_t rtt_down_buffer[CONFIG_ETH_RTT_DOWN_BUFFER_SIZE];
+	uint8_t rtt_down_buffer[CONFIG_ETH_RTT_DOWN_BUFFER_SIZE];
 };
 
 /** Frame send when the interface is initialized to inform other end point
  *  about board reset.
  */
-static const u8_t reset_frame_data[] = {
+static const uint8_t reset_frame_data[] = {
 	0, 0, 0, 0, 0, 0,            /* dummy destination MAC address */
 	0, 0, 0, 0, 0, 0,            /* dummy source MAC address */
 	254, 255,                    /* custom eth type */
@@ -126,7 +127,7 @@ static const u8_t reset_frame_data[] = {
 static struct eth_rtt_context context_data;
 
 /** Utility function to dump all transferred data. */
-static void dbg_hex_dump(const char *prefix, const u8_t *data, size_t length)
+static void dbg_hex_dump(const char *prefix, const uint8_t *data, size_t length)
 {
 	if (IS_ENABLED(CONFIG_ETH_RTT_DEBUG_HEX_DUMP)) {
 
@@ -169,7 +170,7 @@ static void dbg_hex_dump_end(const char *prefix)
  */
 static void rtt_send_begin(struct eth_rtt_context *context)
 {
-	u8_t data = SLIP_END;
+	uint8_t data = SLIP_END;
 
 	SEGGER_RTT_Write(CONFIG_ETH_RTT_CHANNEL, &data, sizeof(data));
 	dbg_hex_dump_begin("RTT<");
@@ -182,13 +183,13 @@ static void rtt_send_begin(struct eth_rtt_context *context)
  *  @param ptr       Points data to send.
  *  @param len       Number of bytes to send.
  */
-static void rtt_send_fragment(struct eth_rtt_context *context, const u8_t *ptr,
+static void rtt_send_fragment(struct eth_rtt_context *context, const uint8_t *ptr,
 			      size_t len)
 {
-	static const u8_t end_stuffed[2] = { SLIP_ESC, SLIP_ESC_END };
-	static const u8_t esc_stuffed[2] = { SLIP_ESC, SLIP_ESC_ESC };
-	const u8_t *end = ptr + len;
-	const u8_t *plain_begin = ptr;
+	static const uint8_t end_stuffed[2] = { SLIP_ESC, SLIP_ESC_END };
+	static const uint8_t esc_stuffed[2] = { SLIP_ESC, SLIP_ESC_ESC };
+	const uint8_t *end = ptr + len;
+	const uint8_t *plain_begin = ptr;
 
 	context->crc = crc16_ccitt(context->crc, ptr, len);
 
@@ -231,8 +232,8 @@ static void rtt_send_fragment(struct eth_rtt_context *context, const u8_t *ptr,
  */
 static void rtt_send_end(struct eth_rtt_context *context)
 {
-	u8_t crc_buffer[2] = { context->crc >> 8, context->crc & 0xFF };
-	u8_t data = SLIP_END;
+	uint8_t crc_buffer[2] = { context->crc >> 8, context->crc & 0xFF };
+	uint8_t data = SLIP_END;
 
 	rtt_send_fragment(context, crc_buffer, sizeof(crc_buffer));
 	SEGGER_RTT_Write(CONFIG_ETH_RTT_CHANNEL, &data, sizeof(data));
@@ -245,9 +246,9 @@ static void rtt_send_end(struct eth_rtt_context *context)
  *  @param iface   Network interface associated with this driver.
  *  @param pkt     Frame that have to be send.
  */
-static int eth_send(struct device *dev, struct net_pkt *pkt)
+static int eth_send(const struct device *dev, struct net_pkt *pkt)
 {
-	struct eth_rtt_context *context = dev->driver_data;
+	struct eth_rtt_context *context = dev->data;
 	struct net_buf *frag;
 
 	if (LOG_LEVEL >= LOG_LEVEL_DBG) {
@@ -286,14 +287,14 @@ static int eth_send(struct device *dev, struct net_pkt *pkt)
  *  @param data      Frame data to pass to network stack with two bytes of CRC.
  *  @param len       Number of bytes in data parameter.
  */
-static void recv_frame(struct eth_rtt_context *context, const u8_t *data,
+static void recv_frame(struct eth_rtt_context *context, const uint8_t *data,
 		       size_t len)
 {
 	int err;
 	struct net_pkt *pkt;
 	struct net_buf *pkt_buf = NULL;
 	struct net_buf *last_buf = NULL;
-	u16_t crc16;
+	uint16_t crc16;
 
 	if (len <= 2) {
 		if (len > 0) {
@@ -375,14 +376,14 @@ static void recv_frame(struct eth_rtt_context *context, const u8_t *data,
 static void decode_new_slip_data(struct eth_rtt_context *context,
 				 size_t new_data_size)
 {
-	u8_t *src = &context->rx_buffer[context->rx_buffer_length];
-	u8_t *dst = &context->rx_buffer[context->rx_buffer_length];
-	u8_t *end = src + new_data_size;
-	u8_t *start = context->rx_buffer;
-	u8_t last_byte = context->rx_buffer_length > 0 ? dst[-1] : 0;
+	uint8_t *src = &context->rx_buffer[context->rx_buffer_length];
+	uint8_t *dst = &context->rx_buffer[context->rx_buffer_length];
+	uint8_t *end = src + new_data_size;
+	uint8_t *start = context->rx_buffer;
+	uint8_t last_byte = context->rx_buffer_length > 0 ? dst[-1] : 0;
 
 	while (src < end) {
-		u8_t byte = *src++;
+		uint8_t byte = *src++;
 		*dst++ = byte;
 		if (byte == SLIP_END) {
 			recv_frame(context, start, dst - start - 1);
@@ -416,7 +417,7 @@ static void poll_work_handler(struct k_work *work)
 {
 	struct eth_rtt_context *context = &context_data;
 	bool active = false;
-	s32_t period = K_MSEC(CONFIG_ETH_POLL_PERIOD_MS);
+	k_timeout_t period = K_MSEC(CONFIG_ETH_POLL_PERIOD_MS);
 	unsigned num;
 
 	do {
@@ -457,7 +458,7 @@ static void poll_work_handler(struct k_work *work)
 static void eth_iface_init(struct net_if *iface)
 {
 	int mac_addr_bytes = -1;
-	struct eth_rtt_context *context = net_if_get_device(iface)->driver_data;
+	struct eth_rtt_context *context = net_if_get_device(iface)->data;
 
 	ethernet_init(iface);
 
@@ -497,7 +498,7 @@ static void eth_iface_init(struct net_if *iface)
 	LOG_INF("Initialized '%s': "
 		"MAC addr %02X:%02X:%02X:%02X:%02X:%02X, "
 		"MTU %d, RTT channel %d, RAM consumed %d",
-		iface->if_dev->dev->config->name, context->mac_addr[0],
+		iface->if_dev->dev->name, context->mac_addr[0],
 		context->mac_addr[1], context->mac_addr[2],
 		context->mac_addr[3], context->mac_addr[4],
 		context->mac_addr[5], CONFIG_ETH_RTT_MTU,
@@ -511,7 +512,7 @@ static void eth_iface_init(struct net_if *iface)
 /** Returns network driver capabilities. Currently no additional capabilities
  *  available.
  */
-static enum ethernet_hw_caps eth_capabilities(struct device *dev)
+static enum ethernet_hw_caps eth_capabilities(const struct device *dev)
 {
 	return (enum ethernet_hw_caps)0;
 }
@@ -519,9 +520,9 @@ static enum ethernet_hw_caps eth_capabilities(struct device *dev)
 /** Network driver initialization. It setups RTT channels.
  *  @param dev   Device to initialize.
  */
-static int eth_rtt_init(struct device *dev)
+static int eth_rtt_init(const struct device *dev)
 {
-	struct eth_rtt_context *context = dev->driver_data;
+	struct eth_rtt_context *context = dev->data;
 
 	SEGGER_RTT_ConfigUpBuffer(CONFIG_ETH_RTT_CHANNEL, CHANNEL_NAME,
 				  context->rtt_up_buffer,
@@ -544,5 +545,6 @@ static const struct ethernet_api if_api = {
 
 /** Initialization of network device driver. */
 ETH_NET_DEVICE_INIT(eth_rtt, CONFIG_ETH_RTT_DRV_NAME, eth_rtt_init,
-		    &context_data, NULL, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,
-		    &if_api, CONFIG_ETH_RTT_MTU);
+		    device_pm_control_nop, &context_data, NULL,
+		    CONFIG_KERNEL_INIT_PRIORITY_DEFAULT, &if_api,
+		    CONFIG_ETH_RTT_MTU);

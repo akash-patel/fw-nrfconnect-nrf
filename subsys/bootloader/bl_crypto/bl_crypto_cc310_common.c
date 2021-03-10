@@ -1,12 +1,12 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <errno.h>
 #include <zephyr/types.h>
-#include <misc/util.h>
+#include <sys/util.h>
 #include <toolchain.h>
 #include <nrf.h>
 #include <nrf_cc310_bl_init.h>

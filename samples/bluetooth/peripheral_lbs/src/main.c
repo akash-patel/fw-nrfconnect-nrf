@@ -1,17 +1,17 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <zephyr/types.h>
 #include <stddef.h>
 #include <string.h>
 #include <errno.h>
-#include <misc/printk.h>
-#include <misc/byteorder.h>
+#include <sys/printk.h>
+#include <sys/byteorder.h>
 #include <zephyr.h>
-#include <gpio.h>
+#include <drivers/gpio.h>
 #include <soc.h>
 
 #include <bluetooth/bluetooth.h>
@@ -46,10 +46,10 @@ static const struct bt_data ad[] = {
 };
 
 static const struct bt_data sd[] = {
-	BT_DATA_BYTES(BT_DATA_UUID128_ALL, LBS_UUID_SERVICE),
+	BT_DATA_BYTES(BT_DATA_UUID128_ALL, BT_UUID_LBS_VAL),
 };
 
-static void connected(struct bt_conn *conn, u8_t err)
+static void connected(struct bt_conn *conn, uint8_t err)
 {
 	if (err) {
 		printk("Connection failed (err %u)\n", err);
@@ -61,14 +61,14 @@ static void connected(struct bt_conn *conn, u8_t err)
 	dk_set_led_on(CON_STATUS_LED);
 }
 
-static void disconnected(struct bt_conn *conn, u8_t reason)
+static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
 	printk("Disconnected (reason %u)\n", reason);
 
 	dk_set_led_off(CON_STATUS_LED);
 }
 
-#ifdef CONFIG_BT_GATT_LBS_SECURITY_ENABLED
+#ifdef CONFIG_BT_LBS_SECURITY_ENABLED
 static void security_changed(struct bt_conn *conn, bt_security_t level,
 			     enum bt_security_err err)
 {
@@ -88,12 +88,12 @@ static void security_changed(struct bt_conn *conn, bt_security_t level,
 static struct bt_conn_cb conn_callbacks = {
 	.connected        = connected,
 	.disconnected     = disconnected,
-#ifdef CONFIG_BT_GATT_LBS_SECURITY_ENABLED
+#ifdef CONFIG_BT_LBS_SECURITY_ENABLED
 	.security_changed = security_changed,
 #endif
 };
 
-#if defined(CONFIG_BT_GATT_LBS_SECURITY_ENABLED)
+#if defined(CONFIG_BT_LBS_SECURITY_ENABLED)
 static void auth_passkey_display(struct bt_conn *conn, unsigned int passkey)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
@@ -162,15 +162,15 @@ static bool app_button_cb(void)
 	return app_button_state;
 }
 
-static struct bt_gatt_lbs_cb lbs_callbacs = {
+static struct bt_lbs_cb lbs_callbacs = {
 	.led_cb    = app_led_cb,
 	.button_cb = app_button_cb,
 };
 
-static void button_changed(u32_t button_state, u32_t has_changed)
+static void button_changed(uint32_t button_state, uint32_t has_changed)
 {
 	if (has_changed & USER_BUTTON) {
-		bt_gatt_lbs_send_button_state(button_state);
+		bt_lbs_send_button_state(button_state);
 		app_button_state = button_state ? true : false;
 	}
 }
@@ -207,7 +207,7 @@ void main(void)
 	}
 
 	bt_conn_cb_register(&conn_callbacks);
-	if (IS_ENABLED(CONFIG_BT_GATT_LBS_SECURITY_ENABLED)) {
+	if (IS_ENABLED(CONFIG_BT_LBS_SECURITY_ENABLED)) {
 		bt_conn_auth_cb_register(&conn_auth_callbacks);
 	}
 
@@ -223,7 +223,7 @@ void main(void)
 		settings_load();
 	}
 
-	err = bt_gatt_lbs_init(&lbs_callbacs);
+	err = bt_lbs_init(&lbs_callbacs);
 	if (err) {
 		printk("Failed to init LBS (err:%d)\n", err);
 		return;
@@ -240,7 +240,6 @@ void main(void)
 
 	for (;;) {
 		dk_set_led(RUN_STATUS_LED, (++blink_status) % 2);
-		k_sleep(RUN_LED_BLINK_INTERVAL);
+		k_sleep(K_MSEC(RUN_LED_BLINK_INTERVAL));
 	}
 }
-

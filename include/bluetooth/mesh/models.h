@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2019 Nordic Semiconductor ASA
+ * Copyright (c) 2019 - 2020 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #ifndef BT_MESH_MODELS_H__
@@ -34,6 +34,34 @@
 #include <bluetooth/mesh/gen_loc_cli.h>
 #include <bluetooth/mesh/gen_prop_srv.h>
 #include <bluetooth/mesh/gen_prop_cli.h>
+
+/* Sensor models */
+#include <bluetooth/mesh/sensor_types.h>
+#include <bluetooth/mesh/sensor_srv.h>
+#include <bluetooth/mesh/sensor_cli.h>
+
+/* Lighting models */
+#include <bluetooth/mesh/lightness_srv.h>
+#include <bluetooth/mesh/lightness_cli.h>
+#include <bluetooth/mesh/light_ctrl_srv.h>
+#include <bluetooth/mesh/light_ctrl_cli.h>
+#include <bluetooth/mesh/light_ctl_cli.h>
+#include <bluetooth/mesh/light_temp_srv.h>
+#include <bluetooth/mesh/light_ctl_srv.h>
+#include <bluetooth/mesh/light_xyl_cli.h>
+#include <bluetooth/mesh/light_xyl_srv.h>
+#include <bluetooth/mesh/light_hsl_cli.h>
+#include <bluetooth/mesh/light_hsl_srv.h>
+#include <bluetooth/mesh/light_sat_srv.h>
+#include <bluetooth/mesh/light_hue_srv.h>
+
+/* Time and Scene models */
+#include <bluetooth/mesh/time_cli.h>
+#include <bluetooth/mesh/time_srv.h>
+#include <bluetooth/mesh/scene_cli.h>
+#include <bluetooth/mesh/scene_srv.h>
+#include <bluetooth/mesh/scheduler_cli.h>
+#include <bluetooth/mesh/scheduler_srv.h>
 
 /** @brief Check whether the model publishes to a unicast address.
  *

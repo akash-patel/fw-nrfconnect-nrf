@@ -1,15 +1,17 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <zephyr.h>
-#include <misc/printk.h>
-#include <misc/util.h>
+#include <sys/printk.h>
+#include <sys/util.h>
 #include <linker/linker-defs.h>
 #include <device.h>
-#include <gpio.h>
+#include <drivers/gpio.h>
+#include <hal/nrf_spu.h>
+#include <arch/arm/aarch32/irq.h>
 #include "spm_internal.h"
 
 #if !defined(CONFIG_ARM_SECURE_FIRMWARE)
@@ -25,15 +27,22 @@
 #if USE_PARTITION_MANAGER
 #include <pm_config.h>
 #define NON_SECURE_APP_ADDRESS PM_APP_ADDRESS
+#ifdef PM_SRAM_SECURE_SIZE
+#define NON_SECURE_RAM_OFFSET PM_SRAM_SECURE_SIZE
 #else
-#define NON_SECURE_APP_ADDRESS DT_FLASH_AREA_IMAGE_0_NONSECURE_OFFSET_0
+#define NON_SECURE_RAM_OFFSET 0
+#endif
+#else
+#include <storage/flash_map.h>
+#define NON_SECURE_APP_ADDRESS FLASH_AREA_OFFSET(image_0_nonsecure)
+/* This reflects the configuration in DTS. */
+#define NON_SECURE_RAM_OFFSET 0x10000
 #endif /* USE_PARTITION_MANAGER */
 
-#define FIRST_NONSECURE_ADDRESS (NON_SECURE_APP_ADDRESS)
-#define LAST_SECURE_REGION_INDEX \
-	((FIRST_NONSECURE_ADDRESS / FLASH_SECURE_ATTRIBUTION_REGION_SIZE) - 1)
-
-BUILD_ASSERT_MSG(LAST_SECURE_REGION_INDEX != -1, "SPM is too small.");
+#define NON_SECURE_FLASH_REGION_INDEX \
+	((NON_SECURE_APP_ADDRESS) / (FLASH_SECURE_ATTRIBUTION_REGION_SIZE))
+#define NON_SECURE_RAM_REGION_INDEX \
+	((NON_SECURE_RAM_OFFSET) / (RAM_SECURE_ATTRIBUTION_REGION_SIZE))
 
 /*
  *  * The security configuration for depends on where the non secure app
@@ -56,26 +65,15 @@ BUILD_ASSERT_MSG(LAST_SECURE_REGION_INDEX != -1, "SPM is too small.");
  *        |      Flash          |
  *  0 kB  |---------------------|
  *
- *  * The security configuration for SRAM is applied:
+ *  * The SRAM configuration is given by the partition manager.
+ *  * To see the current configuration, run the 'pm_report' target.
+ *  * E.g. 'ninja pm_report, in your build folder. All partitions
+ *  * within the 'secure_ram' span is configured as secure by the SPM.
  *
- *                SRAM
- * 256 kB |---------------------|
- *        |                     |
- *        |                     |
- *        |                     |
- *        |     Non-Secure      |
- *        |    SRAM (image)     |
- *        |                     |
- * 128 kB |.................... |
- *        |     Non-Secure      |
- *        |  SRAM (BSD Library) |
- *  64 kB |---------------------|
- *        |      Secure         |
- *        |       SRAM          |
- *  0 kB  |---------------------|
  */
 
-extern void irq_target_state_set(unsigned int irq, int secure_state);
+extern irq_target_state_t irq_target_state_set(unsigned int irq,
+	irq_target_state_t irq_target_state);
 extern int irq_target_state_is_secure(unsigned int irq);
 
 /* printk wrapper, to turn off logs when booting silently */
@@ -127,20 +125,49 @@ static void spm_config_nsc_flash(void)
 	 * the HW restrictions: The size must be a power of 2 between 32 and
 	 * 4096, and the end address must fall on a SPU region boundary.
 	 */
-	u32_t nsc_size = FLASH_NSC_SIZE_FROM_ADDR(__sg_start);
+	uint32_t nsc_size = FLASH_NSC_SIZE_FROM_ADDR(__sg_start);
 
-	__ASSERT((u32_t)__sg_size <= nsc_size,
+	__ASSERT((uint32_t)__sg_size <= nsc_size,
 		"The Non-Secure Callable region is overflowed by %d byte(s).\n",
-		(u32_t)__sg_size - nsc_size);
+		(uint32_t)__sg_size - nsc_size);
 
-	NRF_SPU->FLASHNSC[0].REGION = FLASH_NSC_REGION_FROM_ADDR(__sg_start);
-	NRF_SPU->FLASHNSC[0].SIZE = FLASH_NSC_SIZE_REG(nsc_size);
+	nrf_spu_flashnsc_set(NRF_SPU, 0, FLASH_NSC_SIZE_REG(nsc_size),
+			FLASH_NSC_REGION_FROM_ADDR(__sg_start), false);
 
 	PRINT("Non-secure callable region 0 placed in flash region %d with size %d.\n",
 		NRF_SPU->FLASHNSC[0].REGION, NRF_SPU->FLASHNSC[0].SIZE << 5);
-	PRINT("\n");
 }
 #endif /* CONFIG_ARM_FIRMWARE_HAS_SECURE_ENTRY_FUNCS */
+
+
+static void config_regions(bool ram, size_t start, size_t end, uint32_t perm)
+{
+	const size_t region_size = ram ? RAM_SECURE_ATTRIBUTION_REGION_SIZE
+					: FLASH_SECURE_ATTRIBUTION_REGION_SIZE;
+
+	__ASSERT_NO_MSG(end >= start);
+	if (end <= start) {
+		return;
+	}
+
+	for (size_t i = start; i < end; i++) {
+		if (ram) {
+			NRF_SPU->RAMREGION[i].PERM = perm;
+		} else {
+			NRF_SPU->FLASHREGION[i].PERM = perm;
+		}
+	}
+
+	PRINT("%02u %02u 0x%05x 0x%05x \t", start, end - 1,
+				region_size * start, region_size * end);
+	PRINT("%s", perm & (ram ? SRAM_SECURE : FLASH_SECURE) ? "Secure\t\t" :
+								"Non-Secure\t");
+	PRINT("%c", perm & (ram ? SRAM_READ : FLASH_READ)  ? 'r' : '-');
+	PRINT("%c", perm & (ram ? SRAM_WRITE : FLASH_WRITE) ? 'w' : '-');
+	PRINT("%c", perm & (ram ? SRAM_EXEC : FLASH_EXEC)  ? 'x' : '-');
+	PRINT("%c", perm & (ram ? SRAM_LOCK : FLASH_LOCK)  ? 'l' : '-');
+	PRINT("\n");
+}
 
 
 static void spm_config_flash(void)
@@ -148,37 +175,23 @@ static void spm_config_flash(void)
 	/* Regions of flash up to and including SPM are configured as Secure.
 	 * The rest of flash is configured as Non-Secure.
 	 */
-	static const u32_t flash_perm[] = {
-		/* Configuration for Secure Regions */
-		[0 ... LAST_SECURE_REGION_INDEX] =
-			FLASH_READ | FLASH_WRITE | FLASH_EXEC |
-			FLASH_LOCK | FLASH_SECURE,
-		/* Configuration for Non Secure Regions */
-		[(LAST_SECURE_REGION_INDEX + 1) ... 31] =
-			FLASH_READ | FLASH_WRITE | FLASH_EXEC |
-			FLASH_LOCK | FLASH_NONSEC,
-	};
+	const uint32_t secure_flash_perm = FLASH_READ | FLASH_WRITE | FLASH_EXEC
+			| FLASH_LOCK | FLASH_SECURE;
+	const uint32_t nonsecure_flash_perm = FLASH_READ | FLASH_WRITE | FLASH_EXEC
+			| FLASH_LOCK | FLASH_NONSEC;
 
-	PRINT("Flash region\t\tDomain\t\tPermissions\n");
+	PRINT("Flash regions\t\tDomain\t\tPermissions\n");
 
-	/* Assign permissions */
-	for (size_t i = 0; i < ARRAY_SIZE(flash_perm); i++) {
-
-		NRF_SPU->FLASHREGION[i].PERM = flash_perm[i];
-
-		PRINT("%02u 0x%05x 0x%05x \t", i, 32 * KB(i), 32 * KB(i + 1));
-		PRINT("%s", flash_perm[i] & FLASH_SECURE ? "Secure\t\t" :
-							   "Non-Secure\t");
-
-		PRINT("%c", flash_perm[i] & FLASH_READ  ? 'r' : '-');
-		PRINT("%c", flash_perm[i] & FLASH_WRITE ? 'w' : '-');
-		PRINT("%c", flash_perm[i] & FLASH_EXEC  ? 'x' : '-');
-		PRINT("%c", flash_perm[i] & FLASH_LOCK  ? 'l' : '-');
-		PRINT("\n");
-	}
+	config_regions(false, 0, NON_SECURE_FLASH_REGION_INDEX,
+			secure_flash_perm);
+	config_regions(false, NON_SECURE_FLASH_REGION_INDEX,
+			NUM_FLASH_SECURE_ATTRIBUTION_REGIONS,
+			nonsecure_flash_perm);
+	PRINT("\n");
 
 #if defined(CONFIG_ARM_FIRMWARE_HAS_SECURE_ENTRY_FUNCS)
 	spm_config_nsc_flash();
+	PRINT("\n");
 
 #if defined(CONFIG_SPM_SECURE_SERVICES)
 	int err = spm_secure_services_init();
@@ -188,8 +201,6 @@ static void spm_config_flash(void)
 	}
 #endif
 #endif /* CONFIG_ARM_FIRMWARE_HAS_SECURE_ENTRY_FUNCS */
-
-	PRINT("\n");
 }
 
 static void spm_config_sram(void)
@@ -197,38 +208,27 @@ static void spm_config_sram(void)
 	/* Lower 64 kB of SRAM is allocated to the Secure firmware image.
 	 * The rest of SRAM is allocated to Non-Secure firmware image.
 	 */
-	static const u32_t sram_perm[] = {
-		/* Configuration for Regions 0 - 7 (0 - 64 kB) */
-		[0 ... 7] = SRAM_READ | SRAM_WRITE | SRAM_EXEC |
-			    SRAM_LOCK | SRAM_SECURE,
-		/* Configuration for Regions 8 - 31 (64 - 256 kB) */
-		[8 ... 31] = SRAM_READ | SRAM_WRITE | SRAM_EXEC |
-			     SRAM_LOCK | SRAM_NONSEC,
-	};
+
+	const uint32_t secure_ram_perm = SRAM_READ | SRAM_WRITE | SRAM_EXEC
+		| SRAM_LOCK | SRAM_SECURE;
+	const uint32_t nonsecure_ram_perm = SRAM_READ | SRAM_WRITE | SRAM_EXEC
+		| SRAM_LOCK | SRAM_NONSEC;
 
 	PRINT("SRAM region\t\tDomain\t\tPermissions\n");
 
-	/* Assign permissions */
-	for (size_t i = 0; i < ARRAY_SIZE(sram_perm); i++) {
-
-		NRF_SPU->RAMREGION[i].PERM = sram_perm[i];
-
-		PRINT("%02u 0x%05x 0x%05x\t", i, 8 * KB(i), 8 * KB(i + 1));
-		PRINT("%s", sram_perm[i] & SRAM_SECURE ? "Secure\t\t" :
-							 "Non-Secure\t");
-
-		PRINT("%c", sram_perm[i] & SRAM_READ  ? 'r' : '-');
-		PRINT("%c", sram_perm[i] & SRAM_WRITE ? 'w' : '-');
-		PRINT("%c", sram_perm[i] & SRAM_EXEC  ? 'x' : '-');
-		PRINT("%c", sram_perm[i] & SRAM_LOCK  ? 'l' : '-');
-		PRINT("\n");
-	}
+	/* Configuration for Secure RAM Regions (0 - 64 kB) */
+	config_regions(true, 0, NON_SECURE_RAM_REGION_INDEX,
+			secure_ram_perm);
+	/* Configuration for Non-Secure RAM Regions (64 kb - end) */
+	config_regions(true, NON_SECURE_RAM_REGION_INDEX,
+			NUM_RAM_SECURE_ATTRIBUTION_REGIONS,
+			nonsecure_ram_perm);
 	PRINT("\n");
 }
 
-static bool usel_or_split(u8_t id)
+static bool usel_or_split(uint8_t id)
 {
-	const u32_t perm = NRF_SPU->PERIPHID[id].PERM;
+	const uint32_t perm = NRF_SPU->PERIPHID[id].PERM;
 
 	/* NRF_GPIOTE1_NS needs special handling as its
 	 * peripheral ID for non-secure han incorrect properties
@@ -252,7 +252,7 @@ static bool usel_or_split(u8_t id)
 	return present && (usel || split);
 }
 
-static int spm_config_peripheral(u8_t id, bool dma_present)
+static int spm_config_peripheral(uint8_t id, bool dma_present)
 {
 	/* Set a peripheral to Non-Secure state, if
 	 * - it is present
@@ -274,11 +274,11 @@ static int spm_config_peripheral(u8_t id, bool dma_present)
 	/* Even for non-present peripherals we force IRQs to be routed
 	 * to Non-Secure state.
 	 */
-	irq_target_state_set(id, 0);
+	irq_target_state_set(id, IRQ_TARGET_STATE_NON_SECURE);
 	return 0;
 }
 
-static void spm_dppi_configure(u32_t mask)
+static void spm_dppi_configure(uint32_t mask)
 {
 	NRF_SPU->DPPI[0].PERM = mask;
 }
@@ -289,8 +289,8 @@ static void spm_config_peripherals(void)
 #ifndef CONFIG_SPM_BOOT_SILENTLY
 		char *name;
 #endif
-		u8_t id;
-		u8_t nonsecure;
+		uint8_t id;
+		uint8_t nonsecure;
 	};
 
 	/* - All user peripherals are allocated to the Non-Secure domain.
@@ -303,8 +303,14 @@ static void spm_config_peripherals(void)
 #ifdef NRF_CLOCK
 		PERIPH("NRF_CLOCK", NRF_CLOCK, CONFIG_SPM_NRF_CLOCK_NS),
 #endif
+#ifdef NRF_RTC0
+		PERIPH("NRF_RTC0", NRF_RTC0, CONFIG_SPM_NRF_RTC0_NS),
+#endif
 #ifdef NRF_RTC1
 		PERIPH("NRF_RTC1", NRF_RTC1, CONFIG_SPM_NRF_RTC1_NS),
+#endif
+#ifdef NRF_NFCT
+		PERIPH("NRF_NFCT", NRF_NFCT, CONFIG_SPM_NRF_NFCT_NS),
 #endif
 #ifdef NRF_NVMC
 		PERIPH("NRF_NVMC", NRF_NVMC, CONFIG_SPM_NRF_NVMC_NS),
@@ -348,20 +354,94 @@ static void spm_config_peripherals(void)
 #ifdef NRF_WDT
 		PERIPH("NRF_WDT", NRF_WDT, CONFIG_SPM_NRF_WDT_NS),
 #endif
+#ifdef NRF_IPC
+		PERIPH("NRF_IPC", NRF_IPC, CONFIG_SPM_NRF_IPC_NS),
+#endif
+#ifdef NRF_VMC
+		PERIPH("NRF_VMC", NRF_VMC, CONFIG_SPM_NRF_VMC_NS),
+#endif
+#ifdef NRF_FPU
+		PERIPH("NRF_FPU", NRF_FPU, CONFIG_SPM_NRF_FPU_NS),
+#endif
+#ifdef NRF_EGU1
+		PERIPH("NRF_EGU1", NRF_EGU1, CONFIG_SPM_NRF_EGU1_NS),
+#endif
+#ifdef NRF_EGU2
+		PERIPH("NRF_EGU2", NRF_EGU2, CONFIG_SPM_NRF_EGU2_NS),
+#endif
+#ifdef NRF_DPPIC
+		PERIPH("NRF_DPPIC", NRF_DPPIC, CONFIG_SPM_NRF_DPPIC_NS),
+#endif
+#ifdef NRF_REGULATORS
+		PERIPH("NRF_REGULATORS", NRF_REGULATORS,
+				      CONFIG_SPM_NRF_REGULATORS_NS),
+#endif
+#ifdef NRF_DCNF
+		PERIPH("NRF_DCNF", NRF_DCNF, CONFIG_SPM_NRF_DCNF_NS),
+#endif
+#ifdef NRF_CTRLAP
+		PERIPH("NRF_CTRLAP", NRF_CTRLAP, CONFIG_SPM_NRF_CTRLAP_NS),
+#endif
+#ifdef NRF_SPIM4
+		PERIPH("NRF_SPIM4", NRF_SPIM4, CONFIG_SPM_NRF_SPIM4_NS),
+#endif
+#ifdef NRF_WDT0
+		PERIPH("NRF_WDT0", NRF_WDT0, CONFIG_SPM_NRF_WDT0_NS),
+#endif
+#ifdef NRF_WDT1
+		PERIPH("NRF_WDT1", NRF_WDT1, CONFIG_SPM_NRF_WDT1_NS),
+#endif
+#ifdef NRF_COMP
+		PERIPH("NRF_COMP", NRF_COMP, CONFIG_SPM_NRF_COMP_NS),
+#endif
+#ifdef NRF_LPCOMP
+		PERIPH("NRF_LPCOMP", NRF_LPCOMP, CONFIG_SPM_NRF_LPCOMP_NS),
+#endif
+#ifdef NRF_PDM0
+		PERIPH("NRF_PDM0", NRF_PDM0, CONFIG_SPM_NRF_PDM0_NS),
+#endif
+#ifdef NRF_I2S0
+		PERIPH("NRF_I2S0", NRF_I2S0, CONFIG_SPM_NRF_I2S0_NS),
+#endif
+#ifdef NRF_QSPI
+		PERIPH("NRF_QSPI", NRF_QSPI, CONFIG_SPM_NRF_QSPI_NS),
+#endif
+#ifdef NRF_NFCT
+		PERIPH("NRF_NFCT", NRF_NFCT, CONFIG_SPM_NRF_NFCT_NS),
+#endif
+#ifdef NRF_MUTEX
+		PERIPH("NRF_MUTEX", NRF_MUTEX, CONFIG_SPM_NRF_MUTEX_NS),
+#endif
+#ifdef NRF_QDEC0
+		PERIPH("NRF_QDEC0", NRF_QDEC0, CONFIG_SPM_NRF_QDEC0_NS),
+#endif
+#ifdef NRF_QDEC1
+		PERIPH("NRF_QDEC1", NRF_QDEC1, CONFIG_SPM_NRF_QDEC1_NS),
+#endif
+#ifdef NRF_USBD
+		PERIPH("NRF_USBD", NRF_USBD, CONFIG_SPM_NRF_USBD_NS),
+#endif
+#ifdef NRF_USBREGULATOR
+		PERIPH("NRF_USBREGULATOR", NRF_USBREGULATOR,
+		       CONFIG_SPM_NRF_USBREGULATOR_NS),
+#endif
+#ifdef NRF_P1
+		PERIPH("NRF_P1", NRF_P1, CONFIG_SPM_NRF_P1_NS),
+#endif
+#ifdef NRF_OSCILLATORS
+		PERIPH("NRF_OSCILLATORS", NRF_OSCILLATORS,
+		       CONFIG_SPM_NRF_OSCILLATORS_NS),
+#endif
+#ifdef NRF_RESET
+		PERIPH("NRF_RESET", NRF_RESET, CONFIG_SPM_NRF_RESET_NS),
+#endif
+
 		/* There is no DTS node for the peripherals below,
 		 * so address them using nrfx macros directly.
 		 */
-		PERIPH("NRF_IPC", NRF_IPC_S, CONFIG_SPM_NRF_IPC_NS),
-		PERIPH("NRF_VMC", NRF_VMC_S, CONFIG_SPM_NRF_VMC_NS),
-		PERIPH("NRF_FPU", NRF_FPU_S, CONFIG_SPM_NRF_FPU_NS),
-		PERIPH("NRF_EGU1", NRF_EGU1_S, CONFIG_SPM_NRF_EGU1_NS),
-		PERIPH("NRF_EGU2", NRF_EGU2_S, CONFIG_SPM_NRF_EGU2_NS),
-		PERIPH("NRF_DPPIC", NRF_DPPIC_S, CONFIG_SPM_NRF_DPPIC_NS),
-
 		PERIPH("NRF_GPIOTE1", NRF_GPIOTE1_NS,
 				      CONFIG_SPM_NRF_GPIOTE1_NS),
-		PERIPH("NRF_REGULATORS", NRF_REGULATORS_S,
-				      CONFIG_SPM_NRF_REGULATORS_NS),
+
 	};
 
 	if (IS_ENABLED(CONFIG_SPM_NRF_DPPIC_NS)) {
@@ -374,6 +454,13 @@ static void spm_config_peripherals(void)
 		/* Configure GPIO pins to be Non-Secure */
 		NRF_SPU->GPIOPORT[0].PERM = 0;
 	}
+
+#ifdef CONFIG_SOC_NRF5340_CPUAPP
+	if (IS_ENABLED(CONFIG_SPM_NRF_P1_NS)) {
+		/* Configure GPIO pins to be Non-Secure */
+		NRF_SPU->GPIOPORT[1].PERM = 0;
+	}
+#endif
 
 	for (size_t i = 0; i < ARRAY_SIZE(periph); i++) {
 		int err;
@@ -428,15 +515,15 @@ void spm_jump(void)
 	/* Extract initial MSP of the Non-Secure firmware image.
 	 * The assumption is that the MSP is located at VTOR_NS[0].
 	 */
-	u32_t *vtor_ns = (u32_t *)NON_SECURE_APP_ADDRESS;
+	uint32_t *vtor_ns = (uint32_t *)NON_SECURE_APP_ADDRESS;
 
-	PRINT("SPM: NS image at 0x%x\n", (u32_t)vtor_ns);
+	PRINT("SPM: NS image at 0x%x\n", (uint32_t)vtor_ns);
 	PRINT("SPM: NS MSP at 0x%x\n", vtor_ns[0]);
 	PRINT("SPM: NS reset vector at 0x%x\n", vtor_ns[1]);
 
 	/* Configure Non-Secure stack */
 	tz_nonsecure_setup_conf_t spm_ns_conf = {
-		.vtor_ns = (u32_t)vtor_ns,
+		.vtor_ns = (uint32_t)vtor_ns,
 		.msp_ns = vtor_ns[0],
 		.psp_ns = 0,
 		.control_ns.npriv = 0, /* Privileged mode*/
@@ -470,7 +557,7 @@ void spm_jump(void)
 
 	} else {
 		PRINT("SPM: wrong pointer type: 0x%x\n",
-		      (u32_t)reset_ns);
+		      (uint32_t)reset_ns);
 	}
 }
 

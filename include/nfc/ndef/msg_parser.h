@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #ifndef NFC_NDEF_MSG_PARSER_H_
@@ -17,7 +17,7 @@
 #include <stdint.h>
 #include <zephyr/types.h>
 #include <nfc/ndef/record_parser.h>
-#include <nfc/ndef/nfc_ndef_msg.h>
+#include <nfc/ndef/msg.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -55,7 +55,7 @@ struct nfc_ndef_msg_parser_msg_2 {
  */
 #define NFC_NDEF_PARSER_REQIRED_MEMO_SIZE_CALC(max_count_of_records)          \
 	(sizeof(struct nfc_ndef_msg_parser_msg_1) +                           \
-	 ((NFC_NDEF_MSG_PARSER_DELTA) * ((u32_t)(max_count_of_records) - 1)))
+	 ((NFC_NDEF_MSG_PARSER_DELTA) * ((uint32_t)(max_count_of_records) - 1)))
 
 /** @brief Parse NFC NDEF messages.
  *
@@ -79,10 +79,10 @@ struct nfc_ndef_msg_parser_msg_2 {
  *  @retval 0 If the operation was successful.
  *            Otherwise, a (negative) error code is returned.
  */
-int nfc_ndef_msg_parse(const u8_t  *result_buf,
-		       u32_t *result_buf_len,
-		       const u8_t *raw_data,
-		       u32_t *raw_data_len);
+int nfc_ndef_msg_parse(const uint8_t  *result_buf,
+		       uint32_t *result_buf_len,
+		       const uint8_t *raw_data,
+		       uint32_t *raw_data_len);
 
 /** @brief Print the parsed contents of an NDEF message.
  *
@@ -101,5 +101,3 @@ void nfc_ndef_msg_printout(const struct nfc_ndef_msg_desc *msg_desc);
 #endif
 
 #endif /* NFC_NDEF_MSG_PARSER_H_ */
-
-

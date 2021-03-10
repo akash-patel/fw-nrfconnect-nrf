@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 /**
  * @file
@@ -49,7 +49,7 @@ static void status_handler(struct bt_mesh_onoff_cli *cli,
 	       status->present_on_off ? "on" : "off");
 }
 
-static void button_handler_cb(u32_t pressed, u32_t changed)
+static void button_handler_cb(uint32_t pressed, uint32_t changed)
 {
 	if (!bt_mesh_is_provisioned()) {
 		return;
@@ -90,19 +90,6 @@ static void button_handler_cb(u32_t pressed, u32_t changed)
 	}
 }
 
-/** Configuration server definition */
-static struct bt_mesh_cfg_srv cfg_srv = {
-	.relay = IS_ENABLED(CONFIG_BT_MESH_RELAY),
-	.beacon = BT_MESH_BEACON_ENABLED,
-	.frnd = IS_ENABLED(CONFIG_BT_MESH_FRIEND),
-	.gatt_proxy = IS_ENABLED(CONFIG_BT_MESH_GATT_PROXY),
-	.default_ttl = BT_MESH_TTL_DEFAULT,
-
-	/* 3 transmissions with 20ms interval */
-	.net_transmit = BT_MESH_TRANSMIT(2, 20),
-	.relay_retransmit = BT_MESH_TRANSMIT(2, 20),
-};
-
 /* Set up a repeating delayed work to blink the DK's LEDs when attention is
  * requested.
  */
@@ -111,7 +98,7 @@ static struct k_delayed_work attention_blink_work;
 static void attention_blink(struct k_work *work)
 {
 	static int idx;
-	const u8_t pattern[] = {
+	const uint8_t pattern[] = {
 		BIT(0) | BIT(1),
 		BIT(1) | BIT(2),
 		BIT(2) | BIT(3),
@@ -147,7 +134,7 @@ BT_MESH_HEALTH_PUB_DEFINE(health_pub, 0);
 static struct bt_mesh_elem elements[] = {
 	BT_MESH_ELEM(1,
 		     BT_MESH_MODEL_LIST(
-			     BT_MESH_MODEL_CFG_SRV(&cfg_srv),
+			     BT_MESH_MODEL_CFG_SRV,
 			     BT_MESH_MODEL_HEALTH_SRV(&health_srv, &health_pub),
 			     BT_MESH_MODEL_ONOFF_CLI(&buttons[0].client)),
 		     BT_MESH_MODEL_NONE),

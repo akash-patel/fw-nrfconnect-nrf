@@ -1,11 +1,11 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <zephyr.h>
-#include <sensor.h>
+#include <drivers/sensor.h>
 #include <net/lwm2m.h>
 
 #include "ui.h"
@@ -22,7 +22,7 @@ LOG_MODULE_REGISTER(app_lwm2m_accel, CONFIG_APP_LOG_LEVEL);
 #if defined(CONFIG_FLIP_POLL)
 #define FLIP_POLL_INTERVAL		K_MSEC(CONFIG_FLIP_POLL_INTERVAL)
 #else
-#define FLIP_POLL_INTERVAL		0
+#define FLIP_POLL_INTERVAL		K_NO_WAIT
 #endif
 
 #ifdef CONFIG_ACCEL_USE_SIM
@@ -54,16 +54,16 @@ struct orientation_detector_sensor_data {
 	enum orientation_state orientation; /**< Current orientation. */
 };
 
-static struct device *accel_dev;
+static const struct device *accel_dev;
 static double accel_offset[3];
 static struct k_delayed_work flip_poll_work;
-static u32_t timestamp;
+static uint32_t timestamp;
 
 int orientation_detector_poll(
 	struct orientation_detector_sensor_data *sensor_data)
 {
 	int err;
-	u8_t i;
+	uint8_t i;
 	double aggregated_data[3] = {0};
 	struct sensor_value accel_data[3];
 	enum orientation_state current_orientation;
@@ -112,7 +112,7 @@ int orientation_detector_poll(
 /**@brief Poll flip orientation and update object if flip mode is enabled. */
 static void flip_work(struct k_work *work)
 {
-	s32_t ts;
+	int32_t ts;
 	static enum orientation_state last_orientation_state =
 		ORIENTATION_NOT_KNOWN;
 	static struct orientation_detector_sensor_data sensor_data;
@@ -175,7 +175,7 @@ exit:
 
 static int accel_calibrate(void)
 {
-	u8_t i;
+	uint8_t i;
 	int err;
 	struct sensor_value accel_data[3];
 	double aggregated_data[3] = {0};

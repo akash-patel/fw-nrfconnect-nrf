@@ -1,12 +1,13 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 #include <string.h>
 #include <zephyr/types.h>
 #include <stdbool.h>
 #include <ztest.h>
+#include <dfu_target.h>
 #include <dfu_target_mcuboot.h>
 
 /* Create buffer which we will fill with strings to test with.
@@ -19,10 +20,12 @@ char buf[1024];
 #define S0_S1 "s0 s1"
 #define NO_SPACE "s0s1"
 
+const char *flash_ptr = S0_S1;
+
 static void test_dfu_ctx_mcuboot_set_b1_file(void)
 {
 	int err;
-	char *update;
+	const char *update;
 	bool s0_active = true;
 
 	memcpy(buf, S0_S1, sizeof(S0_S1));
@@ -38,10 +41,21 @@ static void test_dfu_ctx_mcuboot_set_b1_file(void)
 	zassert_true(strcmp("s0", update) == 0, NULL);
 }
 
+static void test_dfu_ctx_mcuboot_set_b1_file__ptr_placement(void)
+{
+	int err;
+	const char *update;
+	bool s0_active = true;
+
+	err = dfu_ctx_mcuboot_set_b1_file(flash_ptr, s0_active, &update);
+	zassert_true(err != 0, "Did not fail when given flash pointer");
+}
+
+
 static void test_dfu_ctx_mcuboot_set_b1_file__no_separator(void)
 {
 	int err;
-	char *update;
+	const char *update;
 	bool s0_active = true;
 
 	memcpy(buf, NO_SPACE, sizeof(NO_SPACE));
@@ -54,7 +68,7 @@ static void test_dfu_ctx_mcuboot_set_b1_file__no_separator(void)
 static void test_dfu_ctx_mcuboot_set_b1_file__null(void)
 {
 	int err;
-	char *update;
+	const char *update;
 	bool s0_active = true;
 
 	err = dfu_ctx_mcuboot_set_b1_file(NULL, s0_active, &update);
@@ -67,7 +81,7 @@ static void test_dfu_ctx_mcuboot_set_b1_file__null(void)
 static void test_dfu_ctx_mcuboot_set_b1_file__not_terminated(void)
 {
 	int err;
-	char *update;
+	const char *update;
 	bool s0_active = true;
 
 	/* Remove any null terminator */
@@ -81,16 +95,18 @@ static void test_dfu_ctx_mcuboot_set_b1_file__not_terminated(void)
 static void test_dfu_ctx_mcuboot_set_b1_file__empty(void)
 {
 	int err;
-	char *update;
+	const char *update;
 	bool s0_active = true;
+	char empty[] = "";
 
-	err = dfu_ctx_mcuboot_set_b1_file("", s0_active, &update);
+	err = dfu_ctx_mcuboot_set_b1_file(empty, s0_active, &update);
 	zassert_true(update == NULL, "update should not be set");
 }
 
 void test_main(void)
 {
 	ztest_test_suite(lib_dfu_target_mcuboot_test,
+	     ztest_unit_test(test_dfu_ctx_mcuboot_set_b1_file__ptr_placement),
 	     ztest_unit_test(test_dfu_ctx_mcuboot_set_b1_file__no_separator),
 	     ztest_unit_test(test_dfu_ctx_mcuboot_set_b1_file__null),
 	     ztest_unit_test(test_dfu_ctx_mcuboot_set_b1_file__not_terminated),

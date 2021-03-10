@@ -1,84 +1,136 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <zephyr.h>
 #include <nrf_socket.h>
 #include <net/socket.h>
 #include <stdio.h>
+#include <modem/at_cmd.h>
+#include <modem/at_notif.h>
 
-#define AT_XSYSTEMMODE "AT\%XSYSTEMMODE=0,0,1,0"
-#define AT_CFUN        "AT+CFUN=1"
+#ifdef CONFIG_SUPL_CLIENT_LIB
+#include <supl_os_client.h>
+#include <supl_session.h>
+#include "supl_support.h"
+#endif
 
-#ifdef CONFIG_BOARD_NRF9160_PCA10090NS
+#define AT_XSYSTEMMODE      "AT\%XSYSTEMMODE=1,0,1,0"
+#define AT_ACTIVATE_GPS     "AT+CFUN=31"
+#define AT_ACTIVATE_LTE     "AT+CFUN=21"
+#define AT_DEACTIVATE_LTE   "AT+CFUN=20"
+
+#define GNSS_INIT_AND_START 1
+#define GNSS_STOP           2
+#define GNSS_RESTART        3
+
+#define AT_CMD_SIZE(x) (sizeof(x) - 1)
+
+#ifdef CONFIG_BOARD_NRF9160DK_NRF9160NS
 #define AT_MAGPIO      "AT\%XMAGPIO=1,0,0,1,1,1574,1577"
-#define AT_COEX0       "AT\%XCOEX0=1,1,1570,1580"
+#ifdef CONFIG_GPS_SAMPLE_ANTENNA_ONBOARD
+#define AT_COEX0       "AT\%XCOEX0=1,1,1565,1586"
+#elif CONFIG_GPS_SAMPLE_ANTENNA_EXTERNAL
+#define AT_COEX0       "AT\%XCOEX0"
 #endif
+#endif /* CONFIG_BOARD_NRF9160DK_NRF9160NS */
 
-static const char     update_indicator[] = {'\\', '|', '/', '-'};
-static const char     at_commands[][31]  = {
-				AT_XSYSTEMMODE,
-#ifdef CONFIG_BOARD_NRF9160_PCA10090NS
-				AT_MAGPIO,
-				AT_COEX0,
+#ifdef CONFIG_BOARD_THINGY91_NRF9160NS
+#define AT_MAGPIO      "AT\%XMAGPIO=1,1,1,7,1,746,803,2,698,748,2,1710,2200," \
+			"3,824,894,4,880,960,5,791,849,7,1565,1586"
+#ifdef CONFIG_GPS_SAMPLE_ANTENNA_ONBOARD
+#define AT_COEX0       "AT\%XCOEX0=1,1,1565,1586"
+#elif CONFIG_GPS_SAMPLE_ANTENNA_EXTERNAL
+#define AT_COEX0       "AT\%XCOEX0"
 #endif
-				AT_CFUN
-			};
+#endif /* CONFIG_BOARD_THINGY91_NRF9160NS */
 
-static int            fd;
+static const char update_indicator[] = {'\\', '|', '/', '-'};
+static const char *const at_commands[] = {
+	AT_XSYSTEMMODE,
+#if defined(CONFIG_BOARD_NRF9160DK_NRF9160NS) || \
+	defined(CONFIG_BOARD_THINGY91_NRF9160NS)
+	AT_MAGPIO,
+	AT_COEX0,
+#endif
+	AT_ACTIVATE_GPS
+};
 
-static char           nmea_strings[10][NRF_GNSS_NMEA_MAX_LEN];
-static u32_t          nmea_string_cnt;
+static int                   gnss_fd;
+static char                  nmea_strings[10][NRF_GNSS_NMEA_MAX_LEN];
+static uint32_t                 nmea_string_cnt;
 
-static bool           got_first_fix;
-static bool           update_terminal;
-static u64_t          fix_timestamp;
-nrf_gnss_data_frame_t last_fix;
+static bool                  got_fix;
+static uint64_t                 fix_timestamp;
+static nrf_gnss_data_frame_t last_pvt;
 
-void bsd_recoverable_error_handler(uint32_t error)
+K_SEM_DEFINE(lte_ready, 0, 1);
+
+void nrf_modem_recoverable_error_handler(uint32_t error)
 {
 	printf("Err: %lu\n", (unsigned long)error);
 }
 
-static int enable_gps(void)
+static int setup_modem(void)
 {
-	int  at_sock;
-	int  bytes_sent;
-	int  bytes_received;
-	char buf[2];
-
-	at_sock = socket(AF_LTE, 0, NPROTO_AT);
-	if (at_sock < 0) {
-		return -1;
-	}
-
 	for (int i = 0; i < ARRAY_SIZE(at_commands); i++) {
-		bytes_sent = send(at_sock, at_commands[i],
-				  strlen(at_commands[i]), 0);
 
-		if (bytes_sent < 0) {
-			close(at_sock);
-			return -1;
-		}
-
-		do {
-			bytes_received = recv(at_sock, buf, 2, 0);
-		} while (bytes_received == 0);
-
-		if (memcmp(buf, "OK", 2) != 0) {
-			close(at_sock);
+		if (at_cmd_write(at_commands[i], NULL, 0, NULL) != 0) {
 			return -1;
 		}
 	}
-
-	close(at_sock);
 
 	return 0;
 }
 
-static int init_app(void)
+#ifdef CONFIG_SUPL_CLIENT_LIB
+/* Accepted network statuses read from modem */
+static const char status1[] = "+CEREG: 1";
+static const char status2[] = "+CEREG:1";
+static const char status3[] = "+CEREG: 5";
+static const char status4[] = "+CEREG:5";
+
+static void wait_for_lte(void *context, const char *response)
+{
+	if (!memcmp(status1, response, AT_CMD_SIZE(status1)) ||
+		!memcmp(status2, response, AT_CMD_SIZE(status2)) ||
+		!memcmp(status3, response, AT_CMD_SIZE(status3)) ||
+		!memcmp(status4, response, AT_CMD_SIZE(status4))) {
+		k_sem_give(&lte_ready);
+	}
+}
+
+static int activate_lte(bool activate)
+{
+	if (activate) {
+		if (at_cmd_write(AT_ACTIVATE_LTE, NULL, 0, NULL) != 0) {
+			return -1;
+		}
+
+		at_notif_register_handler(NULL, wait_for_lte);
+		if (at_cmd_write("AT+CEREG=2", NULL, 0, NULL) != 0) {
+			return -1;
+		}
+
+		k_sem_take(&lte_ready, K_FOREVER);
+
+		at_notif_deregister_handler(NULL, wait_for_lte);
+		if (at_cmd_write("AT+CEREG=0", NULL, 0, NULL) != 0) {
+			return -1;
+		}
+	} else {
+		if (at_cmd_write(AT_DEACTIVATE_LTE, NULL, 0, NULL) != 0) {
+			return -1;
+		}
+	}
+
+	return 0;
+}
+#endif
+
+static int gnss_ctrl(uint32_t ctrl)
 {
 	int retval;
 
@@ -91,72 +143,96 @@ static int init_app(void)
 					       NRF_GNSS_NMEA_GGA_MASK |
 					       NRF_GNSS_NMEA_RMC_MASK;
 
-	if (enable_gps() != 0) {
-		printk("Failed to enable GPS\n");
-		return -1;
+	if (ctrl == GNSS_INIT_AND_START) {
+		gnss_fd = nrf_socket(NRF_AF_LOCAL,
+				     NRF_SOCK_DGRAM,
+				     NRF_PROTO_GNSS);
+
+		if (gnss_fd >= 0) {
+			printk("GPS Socket created\n");
+		} else {
+			printk("Could not init socket (err: %d)\n", gnss_fd);
+			return -1;
+		}
+
+		retval = nrf_setsockopt(gnss_fd,
+					NRF_SOL_GNSS,
+					NRF_SO_GNSS_FIX_RETRY,
+					&fix_retry,
+					sizeof(fix_retry));
+		if (retval != 0) {
+			printk("Failed to set fix retry value\n");
+			return -1;
+		}
+
+		retval = nrf_setsockopt(gnss_fd,
+					NRF_SOL_GNSS,
+					NRF_SO_GNSS_FIX_INTERVAL,
+					&fix_interval,
+					sizeof(fix_interval));
+		if (retval != 0) {
+			printk("Failed to set fix interval value\n");
+			return -1;
+		}
+
+		retval = nrf_setsockopt(gnss_fd,
+					NRF_SOL_GNSS,
+					NRF_SO_GNSS_NMEA_MASK,
+					&nmea_mask,
+					sizeof(nmea_mask));
+		if (retval != 0) {
+			printk("Failed to set nmea mask\n");
+			return -1;
+		}
 	}
 
-	fd = nrf_socket(NRF_AF_LOCAL, NRF_SOCK_DGRAM, NRF_PROTO_GNSS);
-
-	if (fd >= 0) {
-		printk("Socket created\n");
-	} else {
-		printk("Could not init socket (err: %d)\n", fd);
-		return -1;
+	if ((ctrl == GNSS_INIT_AND_START) ||
+	    (ctrl == GNSS_RESTART)) {
+		retval = nrf_setsockopt(gnss_fd,
+					NRF_SOL_GNSS,
+					NRF_SO_GNSS_START,
+					&delete_mask,
+					sizeof(delete_mask));
+		if (retval != 0) {
+			printk("Failed to start GPS\n");
+			return -1;
+		}
 	}
 
-	retval = nrf_setsockopt(fd,
-				NRF_SOL_GNSS,
-				NRF_SO_GNSS_FIX_RETRY,
-				&fix_retry,
-				sizeof(fix_retry));
-
-	if (retval != 0) {
-		printk("Failed to set fix retry value\n");
-		return -1;
-	}
-
-	retval = nrf_setsockopt(fd,
-				NRF_SOL_GNSS,
-				NRF_SO_GNSS_FIX_INTERVAL,
-				&fix_interval,
-				sizeof(fix_interval));
-
-	if (retval != 0) {
-		printk("Failed to set fix interval value\n");
-		return -1;
-	}
-
-	retval = nrf_setsockopt(fd,
-				NRF_SOL_GNSS,
-				NRF_SO_GNSS_NMEA_MASK,
-				&nmea_mask,
-				sizeof(nmea_mask));
-
-	if (retval != 0) {
-		printk("Failed to set nmea mask\n");
-		return -1;
-	}
-
-	retval = nrf_setsockopt(fd,
-				NRF_SOL_GNSS,
-				NRF_SO_GNSS_START,
-				&delete_mask,
-				sizeof(delete_mask));
-
-	if (retval != 0) {
-		printk("Failed to start GPS\n");
-		return -1;
+	if (ctrl == GNSS_STOP) {
+		retval = nrf_setsockopt(gnss_fd,
+					NRF_SOL_GNSS,
+					NRF_SO_GNSS_STOP,
+					&delete_mask,
+					sizeof(delete_mask));
+		if (retval != 0) {
+			printk("Failed to stop GPS\n");
+			return -1;
+		}
 	}
 
 	return 0;
 }
 
+static int init_app(void)
+{
+	int retval;
+
+	if (setup_modem() != 0) {
+		printk("Failed to initialize modem\n");
+		return -1;
+	}
+
+	retval = gnss_ctrl(GNSS_INIT_AND_START);
+
+	return retval;
+}
+
 static void print_satellite_stats(nrf_gnss_data_frame_t *pvt_data)
 {
-	u8_t  tracked          = 0;
-	u8_t  in_fix           = 0;
-	u8_t  unhealthy        = 0;
+	uint8_t  tracked          = 0;
+	uint8_t  in_fix           = 0;
+	uint8_t  unhealthy        = 0;
 
 	for (int i = 0; i < NRF_GNSS_MAX_SATELLITES; ++i) {
 
@@ -177,24 +253,31 @@ static void print_satellite_stats(nrf_gnss_data_frame_t *pvt_data)
 		}
 	}
 
-	printk("Tracking: %d Using: %d Unhealthy: %d", tracked,
-						       in_fix,
-						       unhealthy);
-
-	printk("\nSeconds since last fix %lld\n",
-			(k_uptime_get() - fix_timestamp) / 1000);
+	printk("Tracking: %d Using: %d Unhealthy: %d\n", tracked,
+							 in_fix,
+							 unhealthy);
 }
 
-static void print_pvt_data(nrf_gnss_data_frame_t *pvt_data)
+static void print_gnss_stats(nrf_gnss_data_frame_t *pvt_data)
+{
+	if (pvt_data->pvt.flags & NRF_GNSS_PVT_FLAG_DEADLINE_MISSED) {
+		printk("GNSS notification deadline missed\n");
+	}
+	if (pvt_data->pvt.flags & NRF_GNSS_PVT_FLAG_NOT_ENOUGH_WINDOW_TIME) {
+		printk("GNSS operation blocked by insufficient time windows\n");
+	}
+}
+
+static void print_fix_data(nrf_gnss_data_frame_t *pvt_data)
 {
 	printf("Longitude:  %f\n", pvt_data->pvt.longitude);
 	printf("Latitude:   %f\n", pvt_data->pvt.latitude);
 	printf("Altitude:   %f\n", pvt_data->pvt.altitude);
 	printf("Speed:      %f\n", pvt_data->pvt.speed);
 	printf("Heading:    %f\n", pvt_data->pvt.heading);
-	printk("Date:       %02u-%02u-%02u\n", pvt_data->pvt.datetime.day,
+	printk("Date:       %02u-%02u-%02u\n", pvt_data->pvt.datetime.year,
 					       pvt_data->pvt.datetime.month,
-					       pvt_data->pvt.datetime.year);
+					       pvt_data->pvt.datetime.day);
 	printk("Time (UTC): %02u:%02u:%02u\n", pvt_data->pvt.datetime.hour,
 					       pvt_data->pvt.datetime.minute,
 					      pvt_data->pvt.datetime.seconds);
@@ -202,10 +285,8 @@ static void print_pvt_data(nrf_gnss_data_frame_t *pvt_data)
 
 static void print_nmea_data(void)
 {
-	printk("NMEA strings:\n");
-
 	for (int i = 0; i < nmea_string_cnt; ++i) {
-		printk("%s\n", nmea_strings[i]);
+		printk("%s", nmea_strings[i]);
 	}
 }
 
@@ -213,26 +294,26 @@ int process_gps_data(nrf_gnss_data_frame_t *gps_data)
 {
 	int retval;
 
-	retval = nrf_recv(fd, gps_data, sizeof(nrf_gnss_data_frame_t), NRF_MSG_DONTWAIT);
+	retval = nrf_recv(gnss_fd,
+			  gps_data,
+			  sizeof(nrf_gnss_data_frame_t),
+			  NRF_MSG_DONTWAIT);
 
 	if (retval > 0) {
 
 		switch (gps_data->data_id) {
 		case NRF_GNSS_PVT_DATA_ID:
+			memcpy(&last_pvt,
+			       gps_data,
+			       sizeof(nrf_gnss_data_frame_t));
+			nmea_string_cnt = 0;
+			got_fix = false;
 
-			if ((gps_data->pvt.flags &
-				NRF_GNSS_PVT_FLAG_FIX_VALID_BIT)
-				== NRF_GNSS_PVT_FLAG_FIX_VALID_BIT) {
+			if (gps_data->pvt.flags
+					& NRF_GNSS_PVT_FLAG_FIX_VALID_BIT) {
 
-				if (!got_first_fix) {
-					got_first_fix = true;
-				}
-
+				got_fix = true;
 				fix_timestamp = k_uptime_get();
-				memcpy(&last_fix, gps_data, sizeof(nrf_gnss_data_frame_t));
-
-				nmea_string_cnt = 0;
-				update_terminal = true;
 			}
 			break;
 
@@ -244,6 +325,27 @@ int process_gps_data(nrf_gnss_data_frame_t *gps_data)
 			}
 			break;
 
+		case NRF_GNSS_AGPS_DATA_ID:
+#ifdef CONFIG_SUPL_CLIENT_LIB
+			printk("\033[1;1H");
+			printk("\033[2J");
+			printk("New AGPS data requested, contacting SUPL server, flags %d\n",
+			       gps_data->agps.data_flags);
+			gnss_ctrl(GNSS_STOP);
+			activate_lte(true);
+			printk("Established LTE link\n");
+			if (open_supl_socket() == 0) {
+				printf("Starting SUPL session\n");
+				supl_session(&gps_data->agps);
+				printk("Done\n");
+				close_supl_socket();
+			}
+			activate_lte(false);
+			gnss_ctrl(GNSS_RESTART);
+			k_msleep(2000);
+#endif
+			break;
+
 		default:
 			break;
 		}
@@ -252,16 +354,61 @@ int process_gps_data(nrf_gnss_data_frame_t *gps_data)
 	return retval;
 }
 
+#ifdef CONFIG_SUPL_CLIENT_LIB
+int inject_agps_type(void *agps,
+		     size_t agps_size,
+		     nrf_gnss_agps_data_type_t type,
+		     void *user_data)
+{
+	ARG_UNUSED(user_data);
+	int retval = nrf_sendto(gnss_fd,
+				agps,
+				agps_size,
+				0,
+				&type,
+				sizeof(type));
+
+	if (retval != 0) {
+		printk("Failed to send AGNSS data, type: %d (err: %d)\n",
+		       type,
+		       errno);
+		return -1;
+	}
+
+	printk("Injected AGPS data, flags: %d, size: %d\n", type, agps_size);
+
+	return 0;
+}
+#endif
+
 int main(void)
 {
 	nrf_gnss_data_frame_t gps_data;
-	u8_t		      cnt = 0;
+	uint8_t		      cnt = 0;
 
-	printk("Staring GPS application\n");
+#ifdef CONFIG_SUPL_CLIENT_LIB
+	static struct supl_api supl_api = {
+		.read       = supl_read,
+		.write      = supl_write,
+		.handler    = inject_agps_type,
+		.logger     = supl_logger,
+		.counter_ms = k_uptime_get
+	};
+#endif
+
+	printk("Starting GPS application\n");
 
 	if (init_app() != 0) {
 		return -1;
 	}
+
+#ifdef CONFIG_SUPL_CLIENT_LIB
+	int rc = supl_init(&supl_api);
+
+	if (rc != 0) {
+		return rc;
+	}
+#endif
 
 	printk("Getting GPS data...\n");
 
@@ -273,32 +420,32 @@ int main(void)
 			 */
 		} while (process_gps_data(&gps_data) > 0);
 
-		if (!got_first_fix) {
-			cnt++;
+		if (IS_ENABLED(CONFIG_GPS_SAMPLE_NMEA_ONLY)) {
+			print_nmea_data();
+			nmea_string_cnt = 0;
+		} else {
 			printk("\033[1;1H");
 			printk("\033[2J");
-			print_satellite_stats(&gps_data);
-			printk("\nScanning [%c] ",
-					update_indicator[cnt%4]);
-		}
-
-		if (((k_uptime_get() - fix_timestamp) >= 1) &&
-		     (got_first_fix)) {
-			printk("\033[1;1H");
-			printk("\033[2J");
-
-			print_satellite_stats(&gps_data);
-
+			print_satellite_stats(&last_pvt);
+			print_gnss_stats(&last_pvt);
 			printk("---------------------------------\n");
-			print_pvt_data(&last_fix);
-			printk("\n");
+
+			if (!got_fix) {
+				printk("Seconds since last fix: %lld\n",
+				       (k_uptime_get() - fix_timestamp) / 1000);
+				cnt++;
+				printk("Searching [%c]\n",
+				       update_indicator[cnt%4]);
+			} else {
+				print_fix_data(&last_pvt);
+			}
+
+			printk("\nNMEA strings:\n\n");
 			print_nmea_data();
 			printk("---------------------------------");
-
-			update_terminal = false;
 		}
 
-		k_sleep(K_MSEC(500));
+		k_msleep(500);
 	}
 
 	return 0;

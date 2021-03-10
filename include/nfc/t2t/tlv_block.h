@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 #ifndef NFC_T2T_TLV_BLOCK_H_
 #define NFC_T2T_TLV_BLOCK_H_
@@ -51,15 +51,15 @@ enum nfc_t2t_tlv_block_types {
  */
 struct nfc_t2t_tlv_block {
 	/** Type of the TLV block. */
-	u8_t tag;
+	uint8_t tag;
 
 	/** Length of the value field. */
-	u16_t length;
+	uint16_t length;
 
 	/** Pointer to the value field (NULL if no value field is present
 	 *  in the block).
 	 */
-	const u8_t *value;
+	const uint8_t *value;
 };
 
 /** Length of a tag field. */

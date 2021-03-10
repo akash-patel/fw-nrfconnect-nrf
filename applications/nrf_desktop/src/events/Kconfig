@@ -1,7 +1,7 @@
 #
 # Copyright (c) 2019 Nordic Semiconductor
 #
-# SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
 if LOG
@@ -30,12 +30,28 @@ config DESKTOP_INIT_LOG_BLE_PEER_OPERATION_EVENT
 	bool "BLE peer operation event"
 	default y
 
+config DESKTOP_INIT_LOG_BLE_PEER_CONN_PARAMS_EVENT
+	bool "BLE peer connection parameters event"
+	default y
+
 config DESKTOP_INIT_LOG_BLE_DISC_COMPLETE_EVENT
 	bool "BLE discovery complete event"
 	default y
 
+config DESKTOP_INIT_LOG_BLE_SMP_TRANSFER_EVENT
+	bool "BLE SMP transfer event"
+	default y
+
+config DESKTOP_INIT_LOG_BLE_QOS_EVENT
+	bool "BLE QOS event"
+	default y
+
 config DESKTOP_INIT_LOG_BUTTON_EVENT
 	bool "Button event"
+	default y
+
+config DESKTOP_INIT_LOG_CPU_LOAD_EVENT
+	bool "CPU load event"
 	default y
 
 config DESKTOP_INIT_LOG_CLICK_EVENT
@@ -46,32 +62,28 @@ config DESKTOP_INIT_LOG_SELECTOR_EVENT
 	bool "Selector event"
 	default y
 
+config DESKTOP_INIT_LOG_PASSKEY_EVENT
+	bool "Passkey event"
+	default y
+
 config DESKTOP_INIT_LOG_CONFIG_EVENT
 	bool "Config event"
-	default y
-
-config DESKTOP_INIT_LOG_HID_KEYBOARD_EVENT
-	bool "HID keyboard event"
-	default y
-
-config DESKTOP_INIT_LOG_HID_MOUSE_EVENT
-	bool "HID mouse event"
-	default y
-
-config DESKTOP_INIT_LOG_HID_CONSUMER_CTRL_EVENT
-	bool "HID consumer control event"
 	default y
 
 config DESKTOP_INIT_LOG_HID_SUBSCRIBER_EVENT
 	bool "HID report subscriber event"
 	default y
 
-config DESKTOP_INIT_LOG_HID_REPORT_SENT_EVENT
-	bool "HID report sent event"
-	default y
-
 config DESKTOP_INIT_LOG_HID_SUBSCRIPTION_EVENT
 	bool "HID report subscription event"
+	default y
+
+config DESKTOP_INIT_LOG_HID_REPORT_EVENT
+	bool "HID report event"
+	default y
+
+config DESKTOP_INIT_LOG_HID_REPORT_SENT_EVENT
+	bool "HID report sent event"
 	default y
 
 config DESKTOP_INIT_LOG_LED_EVENT
@@ -100,6 +112,10 @@ config DESKTOP_INIT_LOG_WAKE_UP_EVENT
 
 config DESKTOP_INIT_LOG_USB_STATE_EVENT
 	bool "USB state event"
+	default y
+
+config DESKTOP_INIT_LOG_USB_HID_EVENT
+	bool "USB HID event"
 	default y
 
 config DESKTOP_INIT_LOG_WHEEL_EVENT

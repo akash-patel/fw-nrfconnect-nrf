@@ -1,20 +1,13 @@
 #
 # Copyright (c) 2018 Nordic Semiconductor
 #
-# SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
-cmake_minimum_required(VERSION 3.8.2)
+cmake_minimum_required(VERSION 3.13.1)
 
-include($ENV{ZEPHYR_BASE}/cmake/app/boilerplate.cmake NO_POLICY_SCOPE)
+find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(NONE)
-
-# Check if selected board is supported.
-if(${BOARD} STREQUAL "nrf52_pca10040")
-elseif(${BOARD} STREQUAL "nrf52840_pca10056")
-else()
-	message(FATAL_ERROR "board ${BOARD} is not supported")
-endif()
 
 FILE(GLOB app_sources src/*.c)
 # NORDIC SDK APP START

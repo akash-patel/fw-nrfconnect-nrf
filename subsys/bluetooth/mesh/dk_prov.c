@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <bluetooth/mesh.h>
@@ -11,28 +11,29 @@
 
 LOG_MODULE_REGISTER(dk_bt_mesh_prov, CONFIG_BT_MESH_DK_PROV_LOG_LEVEL);
 
-static u32_t oob_toggles;
-static u32_t oob_toggle_count;
+static uint32_t oob_toggles;
+static uint32_t oob_toggle_count;
 static struct k_delayed_work oob_work;
 
-static u32_t button_press_count;
+static uint32_t button_press_count;
 static struct button_handler button_handler;
 
 static void oob_blink_toggle(struct k_work *work)
 {
+	struct k_delayed_work *delayed_work =
+		CONTAINER_OF(work, struct k_delayed_work, work);
+
 	dk_set_leds(((oob_toggle_count++) & 0x01) ? DK_NO_LEDS_MSK :
 						    DK_ALL_LEDS_MSK);
 	if (oob_toggle_count == oob_toggles) {
 		oob_toggle_count = 0;
-		k_delayed_work_submit(
-			CONTAINER_OF(work, struct k_delayed_work, work), 3000);
+		k_delayed_work_submit(delayed_work, K_SECONDS(3));
 	} else {
-		k_delayed_work_submit(
-			CONTAINER_OF(work, struct k_delayed_work, work), 250);
+		k_delayed_work_submit(delayed_work, K_MSEC(250));
 	}
 }
 
-static int output_number(bt_mesh_output_action_t action, u32_t number)
+static int output_number(bt_mesh_output_action_t action, uint32_t number)
 {
 	if (IS_ENABLED(CONFIG_BT_MESH_DK_PROV_OOB_LOG) &&
 	    action == BT_MESH_DISPLAY_NUMBER) {
@@ -46,7 +47,7 @@ static int output_number(bt_mesh_output_action_t action, u32_t number)
 		oob_toggles = number * 2;
 		oob_toggle_count = 0;
 		k_delayed_work_init(&oob_work, oob_blink_toggle);
-		k_delayed_work_submit(&oob_work, 0);
+		k_delayed_work_submit(&oob_work, K_NO_WAIT);
 		return 0;
 	}
 
@@ -71,21 +72,21 @@ static void oob_button_timeout(struct k_work *work)
 	bt_mesh_input_number(button_press_count);
 }
 
-static void oob_button_handler(u32_t button_state, u32_t has_changed)
+static void oob_button_handler(uint32_t button_state, uint32_t has_changed)
 {
 	if (!(button_state & has_changed)) {
 		return;
 	}
 
-	u32_t led = button_press_count++ & BIT_MASK(3);
+	uint32_t led = button_press_count++ & BIT_MASK(3);
 
 	dk_set_leds_state(BIT(led) & DK_ALL_LEDS_MSK,
 			  BIT(led - 4) & DK_ALL_LEDS_MSK);
 
-	k_delayed_work_submit(&oob_work, 3000);
+	k_delayed_work_submit(&oob_work, K_SECONDS(3));
 }
 
-static int input(bt_mesh_input_action_t act, u8_t size)
+static int input(bt_mesh_input_action_t act, uint8_t size)
 {
 	if (!IS_ENABLED(CONFIG_BT_MESH_DK_PROV_OOB_BUTTON)) {
 		return -ENOTSUP;
@@ -119,7 +120,7 @@ static void oob_stop(void)
 	}
 }
 
-static void prov_complete(u16_t net_idx, u16_t src)
+static void prov_complete(uint16_t net_idx, uint16_t src)
 {
 	oob_stop();
 	LOG_DBG("Prov complete! Addr: 0x%04x\n", src);
@@ -131,7 +132,7 @@ static void prov_reset(void)
 	bt_mesh_prov_enable(BT_MESH_PROV_ADV | BT_MESH_PROV_GATT);
 }
 
-static u8_t dev_uuid[16];
+static uint8_t dev_uuid[16];
 
 static const struct bt_mesh_prov prov = {
 	.uuid = dev_uuid,
@@ -159,6 +160,31 @@ static const struct bt_mesh_prov prov = {
 
 const struct bt_mesh_prov *bt_mesh_dk_prov_init(void)
 {
+	/* Generate an RFC-4122 version 4 compliant UUID.
+	 * Format:
+	 *
+	 * 0                   1                   2                   3
+	 * 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+	 * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	 * |                          time_low                             |
+	 * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	 * |       time_mid                |         time_hi_and_version   |
+	 * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	 * |clk_seq_hi_res |  clk_seq_low  |         node (0-1)            |
+	 * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	 * |                         node (2-5)                            |
+	 * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	 *
+	 * Where the 4 most significant bits of time_hi_and_version shall be
+	 * 0b0010 and the 2 most significant bits of clk_seq_hi_res shall be
+	 * 0b10. The remaining fields have no required values, and are fetched
+	 * from the HW info device ID. The fields are encoded in big endian
+	 * format.
+	 *
+	 * https://tools.ietf.org/html/rfc4122
+	 */
 	hwinfo_get_device_id(dev_uuid, sizeof(dev_uuid));
+	dev_uuid[6] = (dev_uuid[6] & BIT_MASK(4)) | BIT(6);
+	dev_uuid[8] = (dev_uuid[8] & BIT_MASK(6)) | BIT(7);
 	return &prov;
 }

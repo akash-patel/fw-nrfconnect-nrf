@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #ifndef LED_EFFECT_H__
@@ -20,18 +20,18 @@ extern "C" {
 #endif
 
 struct led_color {
-	u8_t c[3];
+	uint8_t c[3];
 };
 
 struct led_effect_step {
 	struct led_color color;
-	u16_t substep_count;
-	u16_t substep_time;
+	uint16_t substep_count;
+	uint16_t substep_time;
 };
 
 struct led_effect {
 	struct led_effect_step *steps;
-	u16_t step_count;
+	uint16_t step_count;
 	bool loop_forever;
 };
 

@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #ifndef NFC_TNEP_BASE_H_
@@ -15,13 +15,14 @@
  */
 
 #include <stddef.h>
-#include <nfc/ndef/nfc_ndef_msg.h>
+#include <nfc/ndef/msg.h>
 #include <nfc/ndef/tnep_rec.h>
 
 /** TNEP Version.
  *  A major version number in high nibble, a minor version number in low nibble.
  */
 #define NFC_TNEP_VERSION 0x10
+#define NFC_TNEP_NDEF_NLEN_SIZE 2
 
 /** @brief Service communication modes. */
 enum nfc_tnep_comm_mode {

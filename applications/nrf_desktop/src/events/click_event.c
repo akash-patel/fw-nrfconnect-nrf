@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <stdio.h>
@@ -30,7 +30,6 @@ static void profile_click_event(struct log_event_buf *buf,
 {
 	const struct click_event *event = cast_click_event(eh);
 
-	ARG_UNUSED(event);
 	profiler_log_encode_u32(buf, event->key_id);
 	profiler_log_encode_u32(buf, event->click);
 }

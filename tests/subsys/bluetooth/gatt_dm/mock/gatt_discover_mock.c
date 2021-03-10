@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 #include <stdbool.h>
 #include <inttypes.h>
@@ -9,7 +9,7 @@
 #include <bluetooth/uuid.h>
 #include <kernel.h>
 #include <ztest.h>
-#include <misc/util.h>
+#include <sys/util.h>
 
 
 /* Settings of the discover mock */

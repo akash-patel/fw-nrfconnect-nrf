@@ -1,29 +1,39 @@
 .. _bluetooth_mesh_light:
 
-Bluetooth: Mesh Light
+Bluetooth: Mesh light
 #####################
 
-The Bluetooth Mesh Light sample demonstrates how to set up a basic Mesh server model application and control LEDs with the Bluetooth Mesh, using the :ref:`bt_mesh_onoff_readme`.
+.. contents::
+   :local:
+   :depth: 2
+
+The Bluetooth mesh light sample demonstrates how to set up a basic mesh server model application, and control LEDs with the Bluetooth mesh using the :ref:`bt_mesh_onoff_readme`.
+
+.. note::
+   This sample is self-contained, and can be tested on its own.
+   However, it is required when testing the :ref:`bluetooth_mesh_light_switch` sample.
 
 Overview
 ********
 
 This sample is split into two source files:
 
-* A main file to handle initialization.
-* One additional file for handling Mesh models
+* A :file:`main.c` file to handle initialization.
+* One additional file for handling mesh models, :file:`model_handler.c`.
+
+After provisioning and configuring the mesh models supported by the sample in the `nRF Mesh mobile app`_, you can control the LEDs on the development kit from the app.
 
 Provisioning
 ============
 
-The provisioning is handled the :ref:`bt_mesh_dk_prov` with the default configuration.
+The provisioning is handled by the :ref:`bt_mesh_dk_prov`.
 
 Models
 ======
 
-This sample application has the following composition data:
+The following table shows the mesh light composition data for this sample:
 
-.. table:: Mesh light composition data
+.. table::
    :align: center
 
    =================  =================  =================  =================
@@ -34,34 +44,40 @@ This sample application has the following composition data:
    Gen. OnOff Server
    =================  =================  =================  =================
 
-The :ref:`bt_mesh_onoff_srv_readme` instances in elements 1-4 control LEDs 1-4 respectively.
-The Config server allows configurator devices to configure the node remotely.
-The Health server is used to call attention to the device during provisioning.
+The models are used for the following purposes:
 
-The model handling is implemented in src/model_handler.c, which uses the :ref:`dk_buttons_and_leds_readme` to control each LED on the board according to the matching Generic OnOff server's received messages.
+* :ref:`bt_mesh_onoff_srv_readme` instances in elements 1 to 4 each control LEDs 1 to 4, respectively.
+* Config Server allows configurator devices to configure the node remotely.
+* Health Server provides ``attention`` callbacks that are used during provisioning to call your attention to the device.
+  These callbacks trigger blinking of the LEDs.
+
+The model handling is implemented in :file:`src/model_handler.c`, which uses the :ref:`dk_buttons_and_leds_readme` library to control each LED on the development kit according to the matching received messages of Generic OnOff Server.
 
 Requirements
 ************
 
-* One of the following development boards:
+The sample supports the following development kits:
 
-  * |nRF5340DK|
-  * |nRF52840DK|
-  * |nRF52DK|
-  * |nRF51DK|
+.. table-from-rows:: /includes/sample_board_rows.txt
+   :header: heading
+   :rows: nrf5340dk_nrf5340_cpuapp_and_cpuappns, nrf52840dk_nrf52840, nrf52dk_nrf52832, nrf52833dk_nrf52833, nrf52833dk_nrf52820
 
-* The Nordic Semiconductor nRF Mesh app for Android or iOS.
+
+The sample also requires a smartphone with Nordic Semiconductor's nRF Mesh mobile app installed in one of the following versions:
+
+  * `nRF Mesh mobile app for Android`_
+  * `nRF Mesh mobile app for iOS`_
 
 User interface
 **************
 
 Buttons:
-   May be used to input the OOB authentication value during provisioning.
+   Can be used to input the OOB authentication value during provisioning.
    All buttons have the same functionality during this procedure.
 
 LEDs:
-   Shows the OOB authentication value during provisioning if the "Push button" OOB method is used.
-   Shows the OnOff state of the Generic OnOff server of the corresponding element.
+   Show the OOB authentication value during provisioning if the "Push button" OOB method is used.
+   Show the OnOff state of the Generic OnOff Server of the corresponding element.
 
 
 Building and running
@@ -76,32 +92,29 @@ Building and running
 Testing
 =======
 
-After programming the sample to your board, you can test it by using the Nordic Semiconductor nRF Mesh app for Android or iOS.
+After programming the sample to your development kit, you can test it by using a smartphone with Nordic Semiconductor's nRF Mesh app installed.
+Testing consists of provisioning the device and configuring it for communication with the mesh models.
 
-Provisioning and configuration
-------------------------------
+Provisioning the device
+-----------------------
 
-Before communicating with the mesh models, the device must be provisioned.
-The provisioning assigns an address range to the device, and adds it to the mesh network.
-Provisioning is done through the nRF Mesh app for Android or iOS:
+.. |device name| replace:: :guilabel:`Mesh Light`
 
-1. Press "Add node" to start scanning for unprovisioned mesh devices.
-#. Press the "Mesh Light" device to connect to it.
-#. Press "Identify", then "Provision" to provision the device.
-#. When prompted, select an OOB method and follow the instructions in the app.
-#. Once the provisioning and initial configuration is complete, the app will go back to the Network screen.
-   Press the **Mesh Light** node in the list.
-   You'll see basic information about your mesh node and its configuration.
-#. In the Mesh node view, expand the first element.
-   It contains the list of models in the first element of the node.
-#. Press the "Generic OnOff Server" model to see its configuration.
-#. Models must be bound to application keys to be open to communication.
-   Do this by pressing "BIND KEY" at the top of the screen.
-   Select "Application Key 1" from the list.
-#. You should now be able to control the first LED on the device by using the "Generic On Off Controls" in the model view.
-   Pressing "ON" should make the first LED on the DK light up.
+.. include:: /includes/mesh_device_provisioning.txt
 
-Repeat steps 7-9 for each of the elements on the node to control each of the four LEDs on the DK.
+Configuring models
+------------------
+
+See :ref:`ug_bt_mesh_model_config_app` for details on how to configure the mesh models with the nRF Mesh mobile app.
+
+Configure the Generic OnOff Server model on each element on the :guilabel:`Mesh Light` node:
+
+* Bind the model to :guilabel:`Application Key 1`.
+
+  Once the model is bound to the application key, you can control the first LED on the device.
+* In the model view, tap :guilabel:`ON` (one of the Generic On Off Controls) to light up the first LED on the development kit.
+
+Make sure to complete the configuration on each of the elements on the node to enable controlling each of the remaining three LEDs.
 
 Dependencies
 ************
@@ -115,7 +128,7 @@ This sample uses the following |NCS| libraries:
 In addition, it uses the following Zephyr libraries:
 
 * ``include/drivers/hwinfo.h``
-* :ref:`zephyr:kernel`:
+* :ref:`zephyr:kernel_api`:
 
   * ``include/kernel.h``
 

@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #ifndef _CLICK_DETECTOR_H_
@@ -12,7 +12,7 @@ extern "C" {
 #endif
 
 struct click_detector_config {
-	u16_t key_id;
+	uint16_t key_id;
 	bool consume_button_event;
 };
 

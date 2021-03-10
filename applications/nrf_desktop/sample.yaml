@@ -1,27 +1,51 @@
 sample:
-  description: nRF52 Desktop
-  name: BLE HID device reference design
+  name: nRF52 Desktop
+  description: BLE HID device reference design
 tests:
-  test:
+  applications.nrf_desktop.zdebug:
     build_only: true
     build_on_all: true
-    platform_whitelist: nrf52840_pca20041 nrf52840_pca10056 nrf52840_pca10059 nrf52_pca20037 nrf52_pca20044 nrf52810_pca20045
+    platform_allow: nrf52840gmouse_nrf52840 nrf52840dk_nrf52840 nrf52833dk_nrf52833 nrf52840dongle_nrf52840 nrf52kbd_nrf52832 nrf52dmouse_nrf52832 nrf52810dmouse_nrf52810
     tags: bluetooth ci_build
-  test_debug_mcuboot:
+  applications.nrf_desktop.zdebug_b0:
     build_only: true
     build_on_all: true
-    platform_whitelist: nrf52840_pca20041 nrf52840_pca10059
+    platform_allow: nrf52840gmouse_nrf52840 nrf52840dk_nrf52840 nrf52840dongle_nrf52840
+    tags: bluetooth ci_build
+    extra_args: "CMAKE_BUILD_TYPE=ZDebugB0"
+  applications.nrf_desktop.zdebug_splitll:
+    build_only: true
+    build_on_all: true
+    platform_allow: nrf52840gmouse_nrf52840 nrf52840dongle_nrf52840 nrf52kbd_nrf52832
+    tags: bluetooth ci_build
+    extra_args: "CMAKE_BUILD_TYPE=ZDebugSplitLL"
+  applications.nrf_desktop.zdebug_mcuboot:
+    build_only: true
+    build_on_all: true
+    platform_allow: nrf52833dongle_nrf52833
     tags: bluetooth ci_build
     extra_args: "CMAKE_BUILD_TYPE=ZDebugMCUBoot"
-  test_zrelease:
+  applications.nrf_desktop.zrelease:
     build_only: true
     build_on_all: true
-    platform_whitelist: nrf52840_pca20041 nrf52840_pca10056 nrf52840_pca10059 nrf52_pca20037 nrf52_pca20044 nrf52810_pca20045
+    platform_allow: nrf52840gmouse_nrf52840 nrf52840dk_nrf52840 nrf52833dk_nrf52833 nrf52840dongle_nrf52840 nrf52kbd_nrf52832 nrf52dmouse_nrf52832 nrf52810dmouse_nrf52810 nrf52820dongle_nrf52820 nrf52833dongle_nrf52833
     tags: bluetooth ci_build
     extra_args: "CMAKE_BUILD_TYPE=ZRelease"
-  test_zrelease_mcuboot:
+  applications.nrf_desktop.zrelease_b0:
     build_only: true
     build_on_all: true
-    platform_whitelist: nrf52840_pca20041 nrf52840_pca10059 nrf52_pca20037
+    platform_allow: nrf52840gmouse_nrf52840 nrf52840dk_nrf52840 nrf52840dongle_nrf52840 nrf52kbd_nrf52832
+    tags: bluetooth ci_build
+    extra_args: "CMAKE_BUILD_TYPE=ZReleaseB0"
+  applications.nrf_desktop.zrelease_splitll:
+    build_only: true
+    build_on_all: true
+    platform_allow: nrf52840gmouse_nrf52840 nrf52840dongle_nrf52840 nrf52kbd_nrf52832
+    tags: bluetooth ci_build
+    extra_args: "CMAKE_BUILD_TYPE=ZReleaseSplitLL"
+  applications.nrf_desktop.zrelease_mcuboot:
+    build_only: true
+    build_on_all: true
+    platform_allow: nrf52820dongle_nrf52820 nrf52833dongle_nrf52833
     tags: bluetooth ci_build
     extra_args: "CMAKE_BUILD_TYPE=ZReleaseMCUBoot"

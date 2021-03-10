@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 #ifndef __PPI_TRACE_H
 #define __PPI_TRACE_H
@@ -30,7 +30,7 @@ extern "C" {
  *
  * @return Handle, or NULL if the configuration failed.
  */
-void *ppi_trace_config(u32_t pin, u32_t evt);
+void *ppi_trace_config(uint32_t pin, uint32_t evt);
 
 /** @brief Configure a PPI trace pin for tracing complementary events.
  *
@@ -43,7 +43,7 @@ void *ppi_trace_config(u32_t pin, u32_t evt);
  *
  * @return Handle, or NULL if the configuration failed.
  */
-void *ppi_trace_pair_config(u32_t pin, u32_t start_evt, u32_t stop_evt);
+void *ppi_trace_pair_config(uint32_t pin, uint32_t start_evt, uint32_t stop_evt);
 
 /** @brief Enable PPI trace pin.
  *

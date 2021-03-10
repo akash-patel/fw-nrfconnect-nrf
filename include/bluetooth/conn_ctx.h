@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 /**
@@ -15,7 +15,7 @@
 #define BT_CONN_CTX_H_
 
 #include <zephyr.h>
-#include <misc/__assert.h>
+#include <sys/__assert.h>
 #include <bluetooth/conn.h>
 
 #ifdef __cplusplus
@@ -148,13 +148,12 @@ void *bt_conn_ctx_get(struct bt_conn_ctx_lib *ctx_lib, struct bt_conn *conn);
  * @ref bt_conn_ctx_release to ensure proper operation.
  *
  * @param ctx_lib	Bluetooth connection context library instance.
- * @param conn		Bluetooth connection.
  * @param id		Connection context index.
  *
  * @return Pointer to the @ref bt_conn_ctx struct if the operation
  *         was successful. Otherwise NULL.
  */
-const struct bt_conn_ctx *bt_conn_ctx_get_by_id(struct bt_conn_ctx_lib *ctx_lib, u8_t id);
+const struct bt_conn_ctx *bt_conn_ctx_get_by_id(struct bt_conn_ctx_lib *ctx_lib, uint8_t id);
 
 /**
  * @brief Release a connection context from the memory pool.

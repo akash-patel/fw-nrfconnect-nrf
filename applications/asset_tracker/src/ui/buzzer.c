@@ -1,11 +1,11 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <zephyr.h>
-#include <pwm.h>
+#include <drivers/pwm.h>
 
 #include "ui.h"
 
@@ -19,10 +19,10 @@ LOG_MODULE_REGISTER(buzzer, CONFIG_UI_LOG_LEVEL);
 #define BUZZER_MIN_DUTY_CYCLE_DIV	100
 #define BUZZER_MAX_DUTY_CYCLE_DIV	2
 
-struct device *pwm_dev;
+const struct device *pwm_dev;
 static atomic_t buzzer_enabled;
 
-static u32_t intensity_to_duty_cycle_divisor(u8_t intensity)
+static uint32_t intensity_to_duty_cycle_divisor(uint8_t intensity)
 {
 	return MIN(
 		MAX(((intensity - BUZZER_MIN_INTENSITY) *
@@ -33,11 +33,11 @@ static u32_t intensity_to_duty_cycle_divisor(u8_t intensity)
 		BUZZER_MIN_DUTY_CYCLE_DIV);
 }
 
-static int pwm_out(u32_t frequency, u8_t intensity)
+static int pwm_out(uint32_t frequency, uint8_t intensity)
 {
-	static u32_t prev_period;
-	u32_t period = (frequency > 0) ? USEC_PER_SEC / frequency : 0;
-	u32_t duty_cycle = (intensity == 0) ? 0 :
+	static uint32_t prev_period;
+	uint32_t period = (frequency > 0) ? USEC_PER_SEC / frequency : 0;
+	uint32_t duty_cycle = (intensity == 0) ? 0 :
 		period / intensity_to_duty_cycle_divisor(intensity);
 
 	/* Applying workaround due to limitations in PWM driver that doesn't
@@ -45,14 +45,15 @@ static int pwm_out(u32_t frequency, u8_t intensity)
 	 * disables the PWM, but not before the current period is finished.
 	 */
 	if (prev_period) {
-		pwm_pin_set_usec(pwm_dev, CONFIG_UI_BUZZER_PIN, prev_period, 0);
-		k_sleep(MAX(K_MSEC(prev_period / USEC_PER_MSEC), K_MSEC(1)));
+		pwm_pin_set_usec(pwm_dev, CONFIG_UI_BUZZER_PIN,
+				 prev_period, 0, 0);
+		k_sleep(K_MSEC(MAX((prev_period / USEC_PER_MSEC), 1)));
 	}
 
 	prev_period = period;
 
 	return pwm_pin_set_usec(pwm_dev, CONFIG_UI_BUZZER_PIN,
-				period, duty_cycle);
+				period, duty_cycle, 0);
 }
 
 static void buzzer_disable(void)
@@ -106,7 +107,7 @@ int ui_buzzer_init(void)
 	return err;
 }
 
-int ui_buzzer_set_frequency(u32_t frequency, u8_t intensity)
+int ui_buzzer_set_frequency(uint32_t frequency, uint8_t intensity)
 {
 	if (frequency == 0 || intensity == 0) {
 		LOG_DBG("Frequency set to 0, disabling PWM\n");

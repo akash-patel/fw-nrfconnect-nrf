@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 /** @file
@@ -21,8 +21,8 @@
 
 #include <zephyr.h>
 #include <zephyr/types.h>
-#include <misc/reboot.h>
-#include <misc/__assert.h>
+#include <power/reboot.h>
+#include <sys/__assert.h>
 #include <logging/log_ctrl.h>
 
 #include <event_manager_priv.h>
@@ -78,7 +78,7 @@ struct event_dyndata {
 	size_t size;
 
 	/** Dynamic data. */
-	u8_t data[0];
+	uint8_t data[0];
 };
 
 
@@ -112,7 +112,7 @@ struct event_info {
 			   const struct event_header *eh);
 
 	/** Number of logged data fields. */
-	const u8_t log_arg_cnt;
+	const uint8_t log_arg_cnt;
 
 	/** Labels of logged data fields. */
 	const char **log_arg_labels;
@@ -210,7 +210,7 @@ extern const struct event_type __stop_event_types[];
  * @param ename Name of the event.
  * @param types Types of values to profile (represented as @ref profiler_arg).
  * @param labels Labels of values to profile.
- * @param log_arg_func Function used to profile event data.
+ * @param profile_func Function used to profile event data.
  */
 #define EVENT_INFO_DEFINE(ename, types, labels, profile_func) \
 	_EVENT_INFO_DEFINE(ename, ENCODE(types), ENCODE(labels), profile_func)

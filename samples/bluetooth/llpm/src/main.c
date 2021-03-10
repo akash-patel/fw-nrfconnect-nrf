@@ -1,12 +1,12 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
-#include <console.h>
+#include <console/console.h>
 #include <string.h>
-#include <misc/printk.h>
+#include <sys/printk.h>
 #include <zephyr/types.h>
 
 #include <bluetooth/bluetooth.h>
@@ -15,10 +15,10 @@
 #include <bluetooth/hci.h>
 #include <bluetooth/uuid.h>
 #include <bluetooth/services/latency.h>
-#include <bluetooth/services/latency_c.h>
+#include <bluetooth/services/latency_client.h>
 #include <bluetooth/scan.h>
 #include <bluetooth/gatt_dm.h>
-#include <ble_controller_hci_vs.h>
+#include <sdc_hci_vs.h>
 
 #define DEVICE_NAME	CONFIG_BT_DEVICE_NAME
 #define DEVICE_NAME_LEN (sizeof(DEVICE_NAME) - 1)
@@ -29,20 +29,25 @@
 
 static volatile bool test_ready;
 static struct bt_conn *default_conn;
-static struct bt_gatt_latency gatt_latency;
-static struct bt_gatt_latency_c gatt_latency_client;
+static struct bt_latency latency;
+static struct bt_latency_client latency_client;
 static struct bt_le_conn_param *conn_param =
 	BT_LE_CONN_PARAM(INTERVAL_MIN, INTERVAL_MAX, 0, 400);
 static struct bt_conn_info conn_info = {0};
 
 static const struct bt_data ad[] = {
 	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
-	BT_DATA_BYTES(BT_DATA_UUID128_ALL, LATENCY_UUID),
+	BT_DATA_BYTES(BT_DATA_UUID128_ALL, BT_UUID_LATENCY_VAL),
 };
 
 static const struct bt_data sd[] = {
 	BT_DATA(BT_DATA_NAME_COMPLETE, DEVICE_NAME, DEVICE_NAME_LEN),
 };
+
+static struct {
+	uint32_t latency;
+	uint32_t crc_mismatches;
+} llpm_latency;
 
 void scan_filter_match(struct bt_scan_device_info *device_info,
 		       struct bt_scan_filter_match *filter_match,
@@ -50,7 +55,7 @@ void scan_filter_match(struct bt_scan_device_info *device_info,
 {
 	char addr[BT_ADDR_LE_STR_LEN];
 
-	bt_addr_le_to_str(device_info->addr, addr, sizeof(addr));
+	bt_addr_le_to_str(device_info->recv_info->addr, addr, sizeof(addr));
 
 	printk("Filters matched. Address: %s connectable: %d\n",
 	       addr, connectable);
@@ -61,7 +66,7 @@ void scan_filter_no_match(struct bt_scan_device_info *device_info,
 {
 	char addr[BT_ADDR_LE_STR_LEN];
 
-	bt_addr_le_to_str(device_info->addr, addr, sizeof(addr));
+	bt_addr_le_to_str(device_info->recv_info->addr, addr, sizeof(addr));
 
 	printk("Filter does not match. Address: %s connectable: %d\n",
 	       addr, connectable);
@@ -79,8 +84,8 @@ static void scan_init(void)
 {
 	int err;
 	struct bt_le_scan_param scan_param = {
-		.type = BT_HCI_LE_SCAN_PASSIVE,
-		.filter_dup = BT_HCI_LE_SCAN_FILTER_DUP_ENABLE,
+		.type = BT_LE_SCAN_TYPE_PASSIVE,
+		.options = BT_LE_SCAN_OPT_FILTER_DUPLICATE,
 		.interval = 0x0010,
 		.window = 0x0010,
 	};
@@ -108,12 +113,12 @@ static void scan_init(void)
 
 static void discovery_complete(struct bt_gatt_dm *dm, void *context)
 {
-	struct bt_gatt_latency_c *latency = context;
+	struct bt_latency_client *latency = context;
 
 	printk("Service discovery completed\n");
 
 	bt_gatt_dm_data_print(dm);
-	bt_gatt_latency_c_handles_assign(dm, latency);
+	bt_latency_handles_assign(dm, latency);
 	bt_gatt_dm_data_release(dm);
 
 	/* Start testing when the GATT service is discovered */
@@ -158,7 +163,7 @@ static void advertise_and_scan(void)
 	printk("Scanning successfully started\n");
 }
 
-static void connected(struct bt_conn *conn, u8_t err)
+static void connected(struct bt_conn *conn, uint8_t err)
 {
 	if (err) {
 		printk("Connection failed (err %u)\n", err);
@@ -182,13 +187,13 @@ static void connected(struct bt_conn *conn, u8_t err)
 	bt_scan_stop();
 
 	err = bt_gatt_dm_start(default_conn, BT_UUID_LATENCY, &discovery_cb,
-			       &gatt_latency_client);
+			       &latency_client);
 	if (err) {
 		printk("Discover failed (err %d)\n", err);
 	}
 }
 
-static void disconnected(struct bt_conn *conn, u8_t reason)
+static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
 	printk("Disconnected (reason %u)\n", reason);
 
@@ -202,8 +207,8 @@ static void disconnected(struct bt_conn *conn, u8_t reason)
 	advertise_and_scan();
 }
 
-static void le_param_updated(struct bt_conn *conn, u16_t interval,
-			     u16_t latency, u16_t timeout)
+static void le_param_updated(struct bt_conn *conn, uint16_t interval,
+			     uint16_t latency, uint16_t timeout)
 {
 	if (interval == INTERVAL_LLPM) {
 		printk("Connection interval updated: LLPM (1 ms)\n");
@@ -214,9 +219,9 @@ static int enable_llpm_mode(void)
 {
 	int err;
 	struct net_buf *buf;
-	hci_vs_cmd_llpm_mode_set_t *cmd_enable;
+	sdc_hci_cmd_vs_llpm_mode_set_t *cmd_enable;
 
-	buf = bt_hci_cmd_create(HCI_VS_OPCODE_CMD_LLPM_MODE_SET,
+	buf = bt_hci_cmd_create(SDC_HCI_OPCODE_CMD_VS_LLPM_MODE_SET,
 				sizeof(*cmd_enable));
 	if (!buf) {
 		printk("Could not allocate LLPM command buffer\n");
@@ -226,7 +231,7 @@ static int enable_llpm_mode(void)
 	cmd_enable = net_buf_add(buf, sizeof(*cmd_enable));
 	cmd_enable->enable = true;
 
-	err = bt_hci_cmd_send_sync(HCI_VS_OPCODE_CMD_LLPM_MODE_SET, buf, NULL);
+	err = bt_hci_cmd_send_sync(SDC_HCI_OPCODE_CMD_VS_LLPM_MODE_SET, buf, NULL);
 	if (err) {
 		printk("Error enabling LLPM %d\n", err);
 		return err;
@@ -241,16 +246,16 @@ static int enable_llpm_short_connection_interval(void)
 	int err;
 	struct net_buf *buf;
 
-	hci_vs_cmd_conn_update_t *cmd_conn_update;
+	sdc_hci_cmd_vs_conn_update_t *cmd_conn_update;
 
-	buf = bt_hci_cmd_create(HCI_VS_OPCODE_CMD_CONN_UPDATE,
+	buf = bt_hci_cmd_create(SDC_HCI_OPCODE_CMD_VS_CONN_UPDATE,
 				sizeof(*cmd_conn_update));
 	if (!buf) {
 		printk("Could not allocate command buffer\n");
 		return -ENOMEM;
 	}
 
-	u16_t conn_handle;
+	uint16_t conn_handle;
 
 	err = bt_hci_get_conn_handle(default_conn, &conn_handle);
 	if (err) {
@@ -264,7 +269,7 @@ static int enable_llpm_short_connection_interval(void)
 	cmd_conn_update->conn_latency        = 0;
 	cmd_conn_update->supervision_timeout = 300;
 
-	err = bt_hci_cmd_send_sync(HCI_VS_OPCODE_CMD_CONN_UPDATE, buf, NULL);
+	err = bt_hci_cmd_send_sync(SDC_HCI_OPCODE_CMD_VS_CONN_UPDATE, buf, NULL);
 	if (err) {
 		printk("Update connection parameters failed (err %d)\n", err);
 		return err;
@@ -275,20 +280,16 @@ static int enable_llpm_short_connection_interval(void)
 
 static bool on_vs_evt(struct net_buf_simple *buf)
 {
-	u8_t code;
-	hci_vs_evt_qos_conn_event_report_t *evt;
+	uint8_t code;
+	sdc_hci_subevent_vs_qos_conn_event_report_t *evt;
 
 	code = net_buf_simple_pull_u8(buf);
-	if (code != HCI_VS_SUBEVENT_CODE_QOS_CONN_EVENT_REPORT) {
+	if (code != SDC_HCI_SUBEVENT_VS_QOS_CONN_EVENT_REPORT) {
 		return false;
 	}
 
 	evt = (void *)buf->data;
-	if ((evt->event_counter & 0x3FF) == 0) {
-		printk("QoS conn event reports: "
-		       "channel index 0x%02x, CRC errors 0x%02x\n",
-		       evt->channel_index, evt->crc_error_count);
-	}
+	llpm_latency.crc_mismatches += evt->crc_error_count;
 
 	return true;
 }
@@ -305,9 +306,9 @@ static int enable_qos_conn_evt_report(void)
 		return err;
 	}
 
-	hci_vs_cmd_qos_conn_event_report_enable_t *cmd_enable;
+	sdc_hci_cmd_vs_qos_conn_event_report_enable_t *cmd_enable;
 
-	buf = bt_hci_cmd_create(HCI_VS_OPCODE_CMD_QOS_CONN_EVENT_REPORT_ENABLE,
+	buf = bt_hci_cmd_create(SDC_HCI_OPCODE_CMD_VS_QOS_CONN_EVENT_REPORT_ENABLE,
 				sizeof(*cmd_enable));
 	if (!buf) {
 		printk("Could not allocate command buffer\n");
@@ -318,7 +319,7 @@ static int enable_qos_conn_evt_report(void)
 	cmd_enable->enable = true;
 
 	err = bt_hci_cmd_send_sync(
-		HCI_VS_OPCODE_CMD_QOS_CONN_EVENT_REPORT_ENABLE, buf, NULL);
+		SDC_HCI_OPCODE_CMD_VS_QOS_CONN_EVENT_REPORT_ENABLE, buf, NULL);
 	if (err) {
 		printk("Could not send command buffer (err %d)\n", err);
 		return err;
@@ -328,21 +329,20 @@ static int enable_qos_conn_evt_report(void)
 	return 0;
 }
 
-static void latency_response_handler(const void *buf, u16_t len)
+static void latency_response_handler(const void *buf, uint16_t len)
 {
-	u32_t latency_time;
+	uint32_t latency_time;
 
 	if (len == sizeof(latency_time)) {
 		/* compute how long the time spent */
-		latency_time = *((u32_t *)buf);
-		u32_t cycles_spent = k_cycle_get_32() - latency_time;
-		u32_t us_spent = (u32_t)k_cyc_to_ns_floor64(cycles_spent) / 2000;
-
-		printk("Transmission Latency: %u (us)\n", us_spent);
+		latency_time = *((uint32_t *)buf);
+		uint32_t cycles_spent = k_cycle_get_32() - latency_time;
+		llpm_latency.latency =
+			(uint32_t)k_cyc_to_ns_floor64(cycles_spent) / 2000;
 	}
 }
 
-static const struct bt_gatt_latency_c_cb latency_client_cb = {
+static const struct bt_latency_client_cb latency_client_cb = {
 	.latency_response = latency_response_handler
 };
 
@@ -373,15 +373,24 @@ static void test_run(void)
 
 	/* Start sending the timestamp to its peer */
 	while (default_conn) {
-		u32_t time = k_cycle_get_32();
+		uint32_t time = k_cycle_get_32();
 
-		err = bt_gatt_latency_c_request(&gatt_latency_client, &time,
-						sizeof(time));
+		err = bt_latency_request(&latency_client, &time, sizeof(time));
 		if (err && err != -EALREADY) {
 			printk("Latency failed (err %d)\n", err);
 		}
 
-		k_sleep(200); /* sleep 200 ms*/
+		k_sleep(K_MSEC(200)); /* wait for latency response */
+
+		if (llpm_latency.latency) {
+			printk("Transmission Latency: %u (us), CRC mismatches: %u\n",
+			       llpm_latency.latency,
+			       llpm_latency.crc_mismatches);
+		} else {
+			printk("Did not receive a latency response\n");
+		}
+
+		memset(&llpm_latency, 0, sizeof(llpm_latency));
 	}
 }
 
@@ -410,13 +419,13 @@ void main(void)
 
 	scan_init();
 
-	err = bt_gatt_latency_init(&gatt_latency, NULL);
+	err = bt_latency_init(&latency, NULL);
 	if (err) {
 		printk("Latency service initialization failed (err %d)\n", err);
 		return;
 	}
 
-	err = bt_gatt_latency_c_init(&gatt_latency_client, &latency_client_cb);
+	err = bt_latency_client_init(&latency_client, &latency_client_cb);
 	if (err) {
 		printk("Latency client initialization failed (err %d)\n", err);
 		return;

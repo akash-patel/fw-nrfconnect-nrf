@@ -1,11 +1,11 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <string.h>
-#include <misc/printk.h>
+#include <sys/printk.h>
 #include <zephyr/types.h>
 #include <logging/log.h>
 
@@ -16,18 +16,18 @@
 #include <bluetooth/uuid.h>
 #include <bluetooth/services/latency.h>
 
-LOG_MODULE_REGISTER(bt_gatt_latency, CONFIG_BT_GATT_LATENCY_LOG_LEVEL);
+LOG_MODULE_REGISTER(bt_latency, CONFIG_BT_LATENCY_LOG_LEVEL);
 
 enum {
 	LATENCY_INITIALIZED
 };
 
-static const struct bt_gatt_latency_cb *callbacks;
+static const struct bt_latency_cb *callbacks;
 
 static ssize_t received_latency_request(struct bt_conn *conn,
 					const struct bt_gatt_attr *attr,
-					const void *buf, u16_t len,
-					u16_t offset, u8_t flags)
+					const void *buf, uint16_t len,
+					uint16_t offset, uint8_t flags)
 {
 	LOG_DBG("Received Latency request, data %p length %u", buf, len);
 
@@ -46,8 +46,7 @@ BT_GATT_PRIMARY_SERVICE(BT_UUID_LATENCY),
 		NULL, received_latency_request, NULL),
 );
 
-int bt_gatt_latency_init(struct bt_gatt_latency *latency,
-			 const struct bt_gatt_latency_cb *cb)
+int bt_latency_init(struct bt_latency *latency, const struct bt_latency_cb *cb)
 {
 	if (!latency) {
 		return -EINVAL;

@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 #include <shell/shell_bt_nus.h>
 #include <bluetooth/gatt.h>
@@ -20,11 +20,11 @@ SHELL_DEFINE(shell_bt_nus, "bt_nus:~$ ", &shell_transport_bt_nus,
 
 static bool is_init;
 
-static void rx_callback(struct bt_conn *conn, const u8_t *const data, u16_t len)
+static void rx_callback(struct bt_conn *conn, const uint8_t *const data, uint16_t len)
 {
 	const struct shell_bt_nus *bt_nus =
 		(const struct shell_bt_nus *)shell_transport_bt_nus.ctx;
-	u32_t done = ring_buf_put(bt_nus->rx_ringbuf, data, len);
+	uint32_t done = ring_buf_put(bt_nus->rx_ringbuf, data, len);
 
 	LOG_DBG("Received %d bytes.", len);
 	if (done < len) {
@@ -37,16 +37,16 @@ static void rx_callback(struct bt_conn *conn, const u8_t *const data, u16_t len)
 
 static void tx_try(const struct shell_bt_nus *bt_nus)
 {
-	u8_t *buf;
-	u32_t size;
-	u32_t req_len = bt_gatt_nus_max_send(bt_nus->ctrl_blk->conn);
+	uint8_t *buf;
+	uint32_t size;
+	uint32_t req_len = bt_nus_get_mtu(bt_nus->ctrl_blk->conn);
 
 	size = ring_buf_get_claim(bt_nus->tx_ringbuf, &buf, req_len);
 
 	if (size) {
 		int err, err2;
 
-		err = bt_gatt_nus_send(bt_nus->ctrl_blk->conn, buf, size);
+		err = bt_nus_send(bt_nus->ctrl_blk->conn, buf, size);
 		err2 = ring_buf_get_finish(bt_nus->tx_ringbuf, size);
 		__ASSERT_NO_MSG(err2 == 0);
 
@@ -154,7 +154,7 @@ void shell_bt_nus_enable(struct bt_conn *conn)
 	const struct shell_bt_nus *bt_nus =
 			(const struct shell_bt_nus *)shell_transport_bt_nus.ctx;
 	bool log_backend = CONFIG_SHELL_BT_NUS_INIT_LOG_LEVEL > 0;
-	u32_t level =
+	uint32_t level =
 		(CONFIG_SHELL_BT_NUS_INIT_LOG_LEVEL > LOG_LEVEL_DBG) ?
 		CONFIG_LOG_MAX_LEVEL : CONFIG_SHELL_BT_NUS_INIT_LOG_LEVEL;
 
@@ -177,10 +177,10 @@ const struct shell_transport_api shell_bt_nus_transport_api = {
 
 int shell_bt_nus_init(void)
 {
-	struct bt_gatt_nus_cb callbacks = {
-		.received_cb = rx_callback,
-		.sent_cb = tx_callback
+	struct bt_nus_cb callbacks = {
+		.received = rx_callback,
+		.sent = tx_callback
 	};
 
-	return bt_gatt_nus_init(&callbacks);
+	return bt_nus_init(&callbacks);
 }

@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <zephyr.h>
@@ -17,7 +17,7 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_DESKTOP_WATCHDOG_LOG_LEVEL);
 #define WDT_FEED_WORKER_DELAY_MS ((CONFIG_DESKTOP_WATCHDOG_TIMEOUT)/3)
 
 struct wdt_data_storage {
-	struct device *wdt_drv;
+	const struct device *wdt_drv;
 	int wdt_channel_id;
 	struct k_delayed_work work;
 };
@@ -34,7 +34,8 @@ static void watchdog_feed_worker(struct k_work *work_desc)
 		LOG_ERR("Cannot feed watchdog. Error code: %d", err);
 		module_set_state(MODULE_STATE_ERROR);
 	} else {
-		k_delayed_work_submit(&data->work, WDT_FEED_WORKER_DELAY_MS);
+		k_delayed_work_submit(&data->work,
+				      K_MSEC(WDT_FEED_WORKER_DELAY_MS));
 	}
 }
 
@@ -99,7 +100,7 @@ static int watchdog_enable(struct wdt_data_storage *data)
 
 	int err = -ENXIO;
 
-	data->wdt_drv = device_get_binding(DT_WDT_0_NAME);
+	data->wdt_drv = device_get_binding(DT_LABEL(DT_NODELABEL(wdt)));
 	if (data->wdt_drv == NULL) {
 		LOG_ERR("Cannot bind watchdog driver");
 		return err;
@@ -152,4 +153,4 @@ static bool event_handler(const struct event_header *eh)
 }
 
 EVENT_LISTENER(MODULE, event_handler);
-EVENT_SUBSCRIBE(MODULE, module_state_event);
+EVENT_SUBSCRIBE_EARLY(MODULE, module_state_event);

@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #ifndef _CONFIG_EVENT_H_
@@ -22,7 +22,7 @@ extern "C" {
 struct config_event {
 	struct event_header header;
 
-	s8_t init_value1;
+	int8_t init_value1;
 };
 
 EVENT_TYPE_DECLARE(config_event);

@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <bluetooth/bluetooth.h>
@@ -28,8 +28,8 @@ static const struct bt_data sd[] = {
 
 static void radio_ppi_trace_setup(void)
 {
-	u32_t start_evt;
-	u32_t stop_evt;
+	uint32_t start_evt;
+	uint32_t stop_evt;
 	void *handle;
 
 	start_evt = nrf_radio_event_address_get(NRF_RADIO,

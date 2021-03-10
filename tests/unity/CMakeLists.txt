@@ -1,7 +1,7 @@
 #
 # Copyright (c) 2019 Nordic Semiconductor
 #
-# SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
 zephyr_library()
@@ -21,6 +21,7 @@ endif()
 zephyr_include_directories(
 	${CMOCK_DIR}/vendor/unity/src
 	${CMOCK_DIR}/src
+	${CMAKE_CURRENT_LIST_DIR}
 )
 
 zephyr_library_sources(
@@ -28,7 +29,8 @@ zephyr_library_sources(
 	${CMOCK_DIR}/src/cmock.c
 )
 
-zephyr_library_sources_ifdef(CONFIG_BOARD_NATIVE_POSIX src/native_posix.c)
+zephyr_library_sources(src/generic_teardown.c)
+zephyr_compile_definitions(UNITY_INCLUDE_CONFIG_H)
 
 # Generate test runner file.
 function(test_runner_generate test_file_path)
@@ -41,8 +43,9 @@ function(test_runner_generate test_file_path)
   add_custom_command(
     COMMAND ${RUBY_EXECUTABLE}
     ${CMOCK_DIR}/vendor/unity/auto/generate_test_runner.rb
+    ${UNITY_CONFIG_FILE}
     ${test_file_path} ${output_file}
-    DEPENDS ${test_file_path}
+    DEPENDS ${test_file_path} ${UNITY_CONFIG_FILE}
     OUTPUT ${output_file}
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
   )

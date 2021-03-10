@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <zephyr/types.h>
@@ -13,10 +13,10 @@
 #include <bl_crypto.h>
 
 
-BUILD_ASSERT_MSG(SHA256_CTX_SIZE >= sizeof(ocrypto_sha256_ctx), \
+BUILD_ASSERT(SHA256_CTX_SIZE >= sizeof(ocrypto_sha256_ctx), \
 		"ocrypto_sha256_ctx can no longer fit inside bl_sha256_ctx_t.");
 
-int get_hash(u8_t *hash, const u8_t *data, u32_t data_len, bool external)
+int get_hash(uint8_t *hash, const uint8_t *data, uint32_t data_len, bool external)
 {
 	(void) external;
 	ocrypto_sha256(hash, data, data_len);
@@ -34,7 +34,7 @@ int bl_sha256_init(ocrypto_sha256_ctx *ctx)
 	return 0;
 }
 
-int bl_sha256_update(ocrypto_sha256_ctx *ctx, const u8_t *data, u32_t data_len)
+int bl_sha256_update(ocrypto_sha256_ctx *ctx, const uint8_t *data, uint32_t data_len)
 {
 	if (!ctx || !data) {
 		return -EINVAL;
@@ -43,7 +43,7 @@ int bl_sha256_update(ocrypto_sha256_ctx *ctx, const u8_t *data, u32_t data_len)
 	return 0;
 }
 
-int bl_sha256_finalize(ocrypto_sha256_ctx *ctx, u8_t *output)
+int bl_sha256_finalize(ocrypto_sha256_ctx *ctx, uint8_t *output)
 {
 	if (!ctx || !output) {
 		return -EINVAL;

@@ -1,8 +1,9 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
+#include <stdlib.h>
 #include <bluetooth/mesh/gen_plvl_srv.h>
 #include "model_utils.h"
 
@@ -12,8 +13,8 @@
 /** Persistent storage handling */
 struct bt_mesh_plvl_srv_settings_data {
 	struct bt_mesh_plvl_range range;
-	u16_t default_power;
-	u16_t last;
+	uint16_t default_power;
+	uint16_t last;
 	bool is_on;
 } __packed;
 
@@ -30,7 +31,7 @@ static int store_state(struct bt_mesh_plvl_srv *srv)
 		.range = srv->range,
 	};
 
-	return bt_mesh_model_data_store(srv->plvl_model, false, &data,
+	return bt_mesh_model_data_store(srv->plvl_model, false, NULL, &data,
 					sizeof(data));
 }
 
@@ -40,11 +41,47 @@ static void lvl_status_encode(struct net_buf_simple *buf,
 	bt_mesh_model_msg_init(buf, BT_MESH_PLVL_OP_LEVEL_STATUS);
 
 	net_buf_simple_add_le16(buf, status->current);
-	if (status->remaining_time != 0) {
-		net_buf_simple_add_le16(buf, status->target);
-		net_buf_simple_add_u8(
-			buf, model_transition_encode(status->remaining_time));
+
+	if (status->remaining_time == 0) {
+		return;
 	}
+
+	net_buf_simple_add_le16(buf, status->target);
+	net_buf_simple_add_u8(buf,
+			      model_transition_encode(status->remaining_time));
+}
+
+static int pub(struct bt_mesh_plvl_srv *srv, struct bt_mesh_msg_ctx *ctx,
+	       const struct bt_mesh_plvl_status *status)
+{
+	if (ctx == NULL) {
+		/* We'll always make an attempt to publish to the underlying
+		 * models as well, since a publish message typically indicates
+		 * a status change, which should always be published.
+		 * Ignoring the status codes, so that we're able to publish
+		 * in the highest model even if the underlying models don't have
+		 * publishing configured.
+		 */
+		struct bt_mesh_lvl_status lvl_status;
+		struct bt_mesh_onoff_status onoff_status;
+
+		lvl_status.current = POWER_TO_LVL(status->current);
+		lvl_status.target = POWER_TO_LVL(status->target);
+		lvl_status.remaining_time = status->remaining_time;
+		(void)bt_mesh_lvl_srv_pub(&srv->lvl, NULL, &lvl_status);
+
+		onoff_status.present_on_off = status->current > 0;
+		onoff_status.target_on_off = status->target > 0;
+		onoff_status.remaining_time = status->remaining_time;
+		(void)bt_mesh_onoff_srv_pub(&srv->ponoff.onoff, NULL,
+					    &onoff_status);
+	}
+
+	BT_MESH_MODEL_BUF_DEFINE(msg, BT_MESH_PLVL_OP_LEVEL_STATUS,
+				 BT_MESH_PLVL_MSG_MAXLEN_LEVEL_STATUS);
+	lvl_status_encode(&msg, status);
+
+	return model_send(srv->plvl_model, ctx, &msg);
 }
 
 static void transition_get(struct bt_mesh_plvl_srv *srv,
@@ -90,18 +127,22 @@ static void change_lvl(struct bt_mesh_plvl_srv *srv,
 		       struct bt_mesh_plvl_set *set,
 		       struct bt_mesh_plvl_status *status)
 {
+	if (!bt_mesh_is_provisioned()) {
+		/* Avoid picking up Power OnOff loaded onoff, we'll use our own.
+		 */
+		return;
+	}
+
 	bool state_change = (srv->is_on == (set->power_lvl == 0));
 
 	if (set->power_lvl != 0) {
-		if (set->power_lvl > srv->range.max) {
-			set->power_lvl = srv->range.max;
-		} else if (set->power_lvl < srv->range.min) {
-			set->power_lvl = srv->range.min;
-		}
-
+		set->power_lvl =
+			CLAMP(set->power_lvl, srv->range.min, srv->range.max);
 		state_change |= (srv->last != set->power_lvl);
 		srv->last = set->power_lvl;
 	}
+
+	srv->is_on = (set->power_lvl > 0);
 
 	if (state_change) {
 		store_state(srv);
@@ -109,6 +150,12 @@ static void change_lvl(struct bt_mesh_plvl_srv *srv,
 
 	memset(status, 0, sizeof(*status));
 	srv->handlers->power_set(srv, ctx, set, status);
+
+	if (IS_ENABLED(CONFIG_BT_MESH_SCENE_SRV)) {
+		bt_mesh_scene_invalidate(&srv->lvl.scene);
+	}
+
+	pub(srv, NULL, status);
 }
 
 static void plvl_set(struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
@@ -123,22 +170,22 @@ static void plvl_set(struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
 	struct bt_mesh_model_transition transition;
 	struct bt_mesh_plvl_status status;
 	struct bt_mesh_plvl_set set;
+	uint8_t tid;
 
 	set.power_lvl = net_buf_simple_pull_le16(buf);
+	tid = net_buf_simple_pull_u8(buf);
 	transition_get(srv, &transition, buf);
 	set.transition = &transition;
 
-	if (tid_check_and_update(&srv->tid, net_buf_simple_pull_u8(buf), ctx)) {
-		srv->handlers->power_get(srv, NULL, &status);
-	} else {
+	if (!tid_check_and_update(&srv->tid, tid, ctx)) {
 		change_lvl(srv, ctx, &set, &status);
+	} else if (ack) {
+		srv->handlers->power_get(srv, NULL, &status);
 	}
 
 	if (ack) {
 		rsp_plvl_status(mod, ctx, &status);
 	}
-
-	(void)bt_mesh_plvl_srv_pub(srv, NULL, &status);
 }
 
 static void handle_plvl_set(struct bt_mesh_model *mod,
@@ -199,10 +246,10 @@ static void set_default(struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
 	}
 
 	struct bt_mesh_plvl_srv *srv = mod->user_data;
-	u8_t new = net_buf_simple_pull_le16(buf);
+	uint16_t new = net_buf_simple_pull_le16(buf);
 
 	if (new != srv->default_power) {
-		u8_t old = srv->default_power;
+		uint16_t old = srv->default_power;
 
 		srv->default_power = new;
 		if (srv->handlers->default_update) {
@@ -248,9 +295,9 @@ static void handle_range_get(struct bt_mesh_model *mod,
 
 	struct bt_mesh_plvl_srv *srv = mod->user_data;
 
-	BT_MESH_MODEL_BUF_DEFINE(rsp, BT_MESH_PLVL_OP_DEFAULT_STATUS,
-				 BT_MESH_PLVL_MSG_LEN_DEFAULT_STATUS);
-	bt_mesh_model_msg_init(&rsp, BT_MESH_PLVL_OP_DEFAULT_STATUS);
+	BT_MESH_MODEL_BUF_DEFINE(rsp, BT_MESH_PLVL_OP_RANGE_STATUS,
+				 BT_MESH_PLVL_MSG_LEN_RANGE_STATUS);
+	bt_mesh_model_msg_init(&rsp, BT_MESH_PLVL_OP_RANGE_STATUS);
 
 	net_buf_simple_add_u8(&rsp, BT_MESH_MODEL_SUCCESS);
 	net_buf_simple_add_le16(&rsp, srv->range.min);
@@ -267,36 +314,39 @@ static void set_range(struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
 	}
 
 	struct bt_mesh_plvl_srv *srv = mod->user_data;
-	enum bt_mesh_model_status status = BT_MESH_MODEL_SUCCESS;
 	struct bt_mesh_plvl_range new;
 
 	new.min = net_buf_simple_pull_le16(buf);
 	new.max = net_buf_simple_pull_le16(buf);
+
+	/* The test specification doesn't accept changes to the status, even if
+	 * the parameters are wrong. Simply ignore messages with wrong
+	 * parameters.
+	 */
+	if (new.min == 0 || new.max == 0 || new.min > new.max) {
+		return;
+	}
+
 	if (new.min != srv->range.min || new.max != srv->range.max) {
-		if (new.min > new.max) {
-			status = BT_MESH_MODEL_ERROR_INVALID_RANGE_MIN;
-		} else {
-			struct bt_mesh_plvl_range old = srv->range;
+		struct bt_mesh_plvl_range old = srv->range;
 
-			srv->range = new;
-			if (srv->handlers->range_update) {
-				srv->handlers->range_update(srv, ctx, &old,
-							    &new);
-			}
-
-			store_state(srv);
+		srv->range = new;
+		if (srv->handlers->range_update) {
+			srv->handlers->range_update(srv, ctx, &old, &new);
 		}
+
+		store_state(srv);
 	}
 
 	if (!ack) {
 		return;
 	}
 
-	BT_MESH_MODEL_BUF_DEFINE(rsp, BT_MESH_PLVL_OP_DEFAULT_STATUS,
-				 BT_MESH_PLVL_MSG_LEN_DEFAULT_STATUS);
-	bt_mesh_model_msg_init(&rsp, BT_MESH_PLVL_OP_DEFAULT_STATUS);
+	BT_MESH_MODEL_BUF_DEFINE(rsp, BT_MESH_PLVL_OP_RANGE_STATUS,
+				 BT_MESH_PLVL_MSG_LEN_RANGE_STATUS);
+	bt_mesh_model_msg_init(&rsp, BT_MESH_PLVL_OP_RANGE_STATUS);
 
-	net_buf_simple_add_u8(&rsp, status);
+	net_buf_simple_add_u8(&rsp, BT_MESH_MODEL_SUCCESS);
 	net_buf_simple_add_le16(&rsp, srv->range.min);
 	net_buf_simple_add_le16(&rsp, srv->range.max);
 
@@ -370,9 +420,13 @@ static void lvl_set(struct bt_mesh_lvl_srv *lvl_srv,
 		.power_lvl = LVL_TO_POWER(lvl_set->lvl),
 		.transition = lvl_set->transition,
 	};
-	struct bt_mesh_plvl_status status;
+	struct bt_mesh_plvl_status status = { 0 };
 
-	change_lvl(srv, ctx, &set, &status);
+	if (lvl_set->new_transaction) {
+		change_lvl(srv, ctx, &set, &status);
+	} else if (rsp) {
+		srv->handlers->power_get(srv, NULL, &status);
+	}
 
 	if (rsp) {
 		rsp->current = POWER_TO_LVL(status.current);
@@ -389,15 +443,31 @@ static void lvl_delta_set(struct bt_mesh_lvl_srv *lvl_srv,
 	struct bt_mesh_plvl_srv *srv =
 		CONTAINER_OF(lvl_srv, struct bt_mesh_plvl_srv, lvl);
 	struct bt_mesh_plvl_status status = { 0 };
+	uint16_t start_lvl;
 
-	srv->handlers->power_get(srv, NULL, &status);
+	if (delta_set->new_transaction) {
+		srv->handlers->power_get(srv, NULL, &status);
+		start_lvl = status.current;
+	} else {
+		start_lvl = srv->last;
+	}
 
 	struct bt_mesh_plvl_set set = {
-		.power_lvl = status.current + delta_set->delta,
+		/* Clamp the target value before storing it in a uint16_t to
+		 * avoid overflow:
+		 */
+		.power_lvl = CLAMP(start_lvl + delta_set->delta, 0, UINT16_MAX),
 		.transition = delta_set->transition,
 	};
 
 	change_lvl(srv, ctx, &set, &status);
+
+	/* Override "last" value to be able to make corrective deltas when
+	 * new_transaction is false. Note that the "last" value in persistent
+	 * storage will still be the target value, allowing us to recover
+	 * correctly on power loss.
+	 */
+	srv->last = start_lvl;
 
 	if (rsp) {
 		rsp->current = POWER_TO_LVL(status.current);
@@ -414,7 +484,7 @@ static void lvl_move_set(struct bt_mesh_lvl_srv *lvl_srv,
 	struct bt_mesh_plvl_srv *srv =
 		CONTAINER_OF(lvl_srv, struct bt_mesh_plvl_srv, lvl);
 	struct bt_mesh_plvl_status status = { 0 };
-	u16_t target;
+	uint16_t target;
 
 	srv->handlers->power_get(srv, NULL, &status);
 
@@ -426,21 +496,22 @@ static void lvl_move_set(struct bt_mesh_lvl_srv *lvl_srv,
 		target = status.current;
 	}
 
+	struct bt_mesh_model_transition transition = { 0 };
 	struct bt_mesh_plvl_set set = {
 		.power_lvl = target,
+		.transition = &transition,
 	};
-	struct bt_mesh_model_transition transition;
 
 	if (move_set->delta != 0 && move_set->transition) {
-		s32_t distance = target - status.current;
+		int32_t distance = abs(target - status.current);
 
-		s32_t time_to_edge = (distance * move_set->transition->time) /
-				     move_set->delta;
+		int32_t time_to_edge =
+			((uint64_t)distance * (uint64_t)move_set->transition->time) /
+			abs(move_set->delta);
 
 		if (time_to_edge > 0) {
 			transition.delay = move_set->transition->delay;
 			transition.time = time_to_edge;
-			set.transition = &transition;
 		}
 	}
 
@@ -508,10 +579,8 @@ const struct bt_mesh_onoff_srv_handlers bt_mesh_plvl_srv_onoff_handlers = {
 	.get = onoff_get,
 };
 
-static void bt_mesh_plvl_srv_reset(struct bt_mesh_model *mod)
+static void plvl_srv_reset(struct bt_mesh_plvl_srv *srv)
 {
-	struct bt_mesh_plvl_srv *srv = mod->user_data;
-
 	srv->range.min = 0;
 	srv->range.max = UINT16_MAX;
 	srv->default_power = 0;
@@ -519,13 +588,38 @@ static void bt_mesh_plvl_srv_reset(struct bt_mesh_model *mod)
 	srv->is_on = false;
 }
 
+static void bt_mesh_plvl_srv_reset(struct bt_mesh_model *mod)
+{
+	struct bt_mesh_plvl_srv *srv = mod->user_data;
+
+	plvl_srv_reset(srv);
+	net_buf_simple_reset(mod->pub->msg);
+	if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
+		(void)bt_mesh_model_data_store(srv->plvl_model, false, NULL,
+					       NULL, 0);
+	}
+}
+
+static int update_handler(struct bt_mesh_model *model)
+{
+	struct bt_mesh_plvl_srv *srv = model->user_data;
+	struct bt_mesh_plvl_status status = { 0 };
+
+	srv->handlers->power_get(srv, NULL, &status);
+	lvl_status_encode(model->pub->msg, &status);
+	return 0;
+}
+
 static int bt_mesh_plvl_srv_init(struct bt_mesh_model *mod)
 {
 	struct bt_mesh_plvl_srv *srv = mod->user_data;
 
 	srv->plvl_model = mod;
-	bt_mesh_plvl_srv_reset(mod);
-	net_buf_simple_init(mod->pub->msg, 0);
+	plvl_srv_reset(srv);
+	srv->pub.msg = &srv->pub_buf;
+	srv->pub.update = update_handler;
+	net_buf_simple_init_with_data(&srv->pub_buf, srv->pub_data,
+				      sizeof(srv->pub_data));
 
 	if (IS_ENABLED(CONFIG_BT_MESH_MODEL_EXTENSIONS)) {
 		/* Model extensions:
@@ -538,6 +632,7 @@ static int bt_mesh_plvl_srv_init(struct bt_mesh_model *mod)
 		 * to support multiple extenders.
 		 */
 		bt_mesh_model_extend(mod, srv->ponoff.ponoff_model);
+		bt_mesh_model_extend(mod, srv->lvl.model);
 		bt_mesh_model_extend(
 			mod,
 			bt_mesh_model_find(
@@ -550,11 +645,15 @@ static int bt_mesh_plvl_srv_init(struct bt_mesh_model *mod)
 
 #ifdef CONFIG_BT_SETTINGS
 static int bt_mesh_plvl_srv_settings_set(struct bt_mesh_model *mod,
-					 size_t len_rd,
+					 const char *name, size_t len_rd,
 					 settings_read_cb read_cb, void *cb_arg)
 {
 	struct bt_mesh_plvl_srv *srv = mod->user_data;
 	struct bt_mesh_plvl_srv_settings_data data;
+
+	if (name) {
+		return -ENOENT;
+	}
 
 	if (read_cb(cb_arg, &data, sizeof(data)) != sizeof(data)) {
 		return -EINVAL;
@@ -568,11 +667,14 @@ static int bt_mesh_plvl_srv_settings_set(struct bt_mesh_model *mod,
 	return 0;
 }
 
-static int bt_mesh_plvl_srv_settings_commit(struct bt_mesh_model *mod)
+static int bt_mesh_plvl_srv_start(struct bt_mesh_model *mod)
 {
 	struct bt_mesh_plvl_srv *srv = mod->user_data;
 	struct bt_mesh_plvl_status dummy = { 0 };
-	struct bt_mesh_plvl_set set;
+	struct bt_mesh_model_transition transition = {
+		.time = srv->ponoff.dtt.transition_time,
+	};
+	struct bt_mesh_plvl_set set = { .transition = &transition };
 
 	switch (srv->ponoff.on_power_up) {
 	case BT_MESH_ON_POWER_UP_OFF:
@@ -589,7 +691,7 @@ static int bt_mesh_plvl_srv_settings_commit(struct bt_mesh_model *mod)
 		return -EINVAL;
 	}
 
-	srv->handlers->power_set(srv, NULL, &set, &dummy);
+	change_lvl(srv, NULL, &set, &dummy);
 	return 0;
 }
 #endif
@@ -599,7 +701,7 @@ const struct bt_mesh_model_cb _bt_mesh_plvl_srv_cb = {
 	.reset = bt_mesh_plvl_srv_reset,
 #ifdef CONFIG_BT_SETTINGS
 	.settings_set = bt_mesh_plvl_srv_settings_set,
-	.settings_commit = bt_mesh_plvl_srv_settings_commit,
+	.start = bt_mesh_plvl_srv_start,
 #endif
 };
 
@@ -607,17 +709,5 @@ int bt_mesh_plvl_srv_pub(struct bt_mesh_plvl_srv *srv,
 			 struct bt_mesh_msg_ctx *ctx,
 			 const struct bt_mesh_plvl_status *status)
 {
-	lvl_status_encode(srv->pub.msg, status);
-
-	return model_send(srv->plvl_model, ctx, srv->pub.msg);
-}
-
-int _bt_mesh_plvl_srv_update_handler(struct bt_mesh_model *model)
-{
-	struct bt_mesh_plvl_srv *srv = model->user_data;
-	struct bt_mesh_plvl_status status = { 0 };
-
-	srv->handlers->power_get(srv, NULL, &status);
-	lvl_status_encode(model->pub->msg, &status);
-	return 0;
+	return pub(srv, ctx, status);
 }

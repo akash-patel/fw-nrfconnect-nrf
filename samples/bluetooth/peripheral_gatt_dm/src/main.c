@@ -1,17 +1,17 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <zephyr/types.h>
 #include <stddef.h>
 #include <string.h>
 #include <errno.h>
-#include <misc/printk.h>
-#include <misc/byteorder.h>
+#include <sys/printk.h>
+#include <sys/byteorder.h>
 #include <zephyr.h>
-#include <gpio.h>
+#include <drivers/gpio.h>
 #include <soc.h>
 
 #include <bluetooth/bluetooth.h>
@@ -34,7 +34,7 @@ static void discover_all_completed(struct bt_gatt_dm *dm, void *ctx)
 {
 	char uuid_str[37];
 
-	const struct bt_gatt_attr *gatt_service_attr =
+	const struct bt_gatt_dm_attr *gatt_service_attr =
 			bt_gatt_dm_service_get(dm);
 	const struct bt_gatt_service_val *gatt_service =
 			bt_gatt_dm_attr_service_val(gatt_service_attr);
@@ -67,7 +67,7 @@ static struct bt_gatt_dm_cb discover_all_cb = {
 	.error_found = discover_all_error_found,
 };
 
-static void connected(struct bt_conn *conn, u8_t err)
+static void connected(struct bt_conn *conn, uint8_t err)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
 
@@ -85,7 +85,7 @@ static void connected(struct bt_conn *conn, u8_t err)
 	}
 }
 
-static void disconnected(struct bt_conn *conn, u8_t reason)
+static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
 

@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <zephyr.h>
@@ -25,7 +25,7 @@ static void send_event(int a, bool sleep)
 	 */
 	ev->val1 = a;
 	if (sleep) {
-		k_sleep(5);
+		k_sleep(K_MSEC(5));
 	}
 	ev->val2 = a;
 
@@ -52,7 +52,7 @@ static void thread1_fn(void)
 
 static void thread2_fn(void)
 {
-	k_timer_start(&test_timer, K_MSEC(2), 0);
+	k_timer_start(&test_timer, K_MSEC(2), K_NO_WAIT);
 	send_event(SOURCE_T2, true);
 }
 

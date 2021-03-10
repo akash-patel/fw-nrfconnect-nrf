@@ -1,12 +1,13 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <zephyr.h>
 #include <device.h>
 #include <drivers/clock_control.h>
+#include <drivers/clock_control/nrf_clock_control.h>
 
 #define MODULE hfclk_lock
 #include "module_state_event.h"
@@ -16,37 +17,43 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(MODULE);
 
-
-static struct device *hfclk_dev;
-
+static struct onoff_manager *mgr;
+static struct onoff_client cli;
 
 static void hfclk_lock(void)
 {
-	if (hfclk_dev) {
+	if (mgr) {
 		return;
 	}
 
-	hfclk_dev = device_get_binding(DT_INST_0_NORDIC_NRF_CLOCK_LABEL "_16M");
-
-	if (!hfclk_dev) {
+	mgr = z_nrf_clock_control_get_onoff(CLOCK_CONTROL_NRF_SUBSYS_HF);
+	if (!mgr) {
 		module_set_state(MODULE_STATE_ERROR);
 	} else {
-		clock_control_on(hfclk_dev, NULL);
-		module_set_state(MODULE_STATE_READY);
+		int err;
+
+		sys_notify_init_spinwait(&cli.notify);
+		err = onoff_request(mgr, &cli);
+		if (err < 0) {
+			mgr = NULL;
+			module_set_state(MODULE_STATE_ERROR);
+		} else {
+			module_set_state(MODULE_STATE_READY);
+		}
 	}
 }
 
 static void hfclk_unlock(void)
 {
-	if (!hfclk_dev) {
+	int err;
+
+	if (!mgr) {
 		return;
 	}
 
-	clock_control_off(hfclk_dev, NULL);
-
-	hfclk_dev = NULL;
-
-	module_set_state(MODULE_STATE_OFF);
+	err = onoff_cancel_or_release(mgr, &cli);
+	module_set_state((err < 0) ? MODULE_STATE_ERROR : MODULE_STATE_OFF);
+	mgr = NULL;
 }
 
 

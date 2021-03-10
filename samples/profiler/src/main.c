@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <zephyr.h>
@@ -9,8 +9,8 @@
 
 #define MAX_VAL1 1000
 
-static u16_t data_event_id;
-static u16_t no_data_event_id;
+static uint16_t data_event_id;
+static uint16_t no_data_event_id;
 
 static void profile_no_data_event(void)
 {
@@ -20,7 +20,7 @@ static void profile_no_data_event(void)
 	profiler_log_send(&buf, no_data_event_id);
 }
 
-static void profile_data_event(u32_t val1, s32_t val2)
+static void profile_data_event(uint32_t val1, int32_t val2)
 {
 	struct log_event_buf buf;
 
@@ -51,8 +51,8 @@ void main(void)
 	printk("Profiler initialized\n");
 	register_profiler_events();
 	printk("Events registered\n");
-	u32_t val1 = 50;
-	s32_t val2 = -50;
+	uint32_t val1 = 50;
+	int32_t val2 = -50;
 
 	/* Periodically changing values and profiling events */
 	while (1) {
@@ -63,10 +63,10 @@ void main(void)
 		}
 
 		profile_no_data_event();
-		k_sleep(10);
+		k_sleep(K_MSEC(10));
 		profile_data_event(val1, val2);
 		printk("Events sent\n");
-		k_sleep(500);
+		k_sleep(K_MSEC(500));
 	}
 
 }

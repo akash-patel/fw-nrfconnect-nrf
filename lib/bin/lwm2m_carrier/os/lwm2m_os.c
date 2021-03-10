@@ -1,38 +1,41 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <lwm2m_os.h>
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
 #include <zephyr.h>
 #include <string.h>
-#include <at_cmd.h>
-#include <at_notif.h>
-#include <at_cmd_parser/at_cmd_parser.h>
-#include <at_cmd_parser/at_params.h>
-#include <bsd.h>
-#include <lte_lc.h>
-#include <net/bsdlib.h>
+#include <modem/at_cmd.h>
+#include <modem/at_notif.h>
+#include <modem/at_cmd_parser.h>
+#include <modem/at_params.h>
+#include <nrf_modem.h>
+#include <modem/lte_lc.h>
+#include <modem/nrf_modem_lib.h>
+#include <modem/modem_key_mgmt.h>
 #include <net/download_client.h>
-#include <pdn_management.h>
-#include <misc/reboot.h>
-#include <misc/util.h>
+#include <power/reboot.h>
+#include <sys/util.h>
 #include <toolchain.h>
-#include <nvs/nvs.h>
+#include <fs/nvs.h>
 #include <logging/log.h>
-#include <errno.h>
 #include <nrf_errno.h>
 
 /* NVS-related defines */
 
 /* Multiple of FLASH_PAGE_SIZE */
-#define NVS_SECTOR_SIZE DT_FLASH_ERASE_BLOCK_SIZE
+#define NVS_SECTOR_SIZE DT_PROP(DT_CHOSEN(zephyr_flash), erase_block_size)
 /* At least 2 sectors */
 #define NVS_SECTOR_COUNT 3
 /* Start address of the filesystem in flash */
-#define NVS_STORAGE_OFFSET DT_FLASH_AREA_STORAGE_OFFSET
+#define NVS_STORAGE_OFFSET \
+	DT_REG_ADDR(DT_NODE_BY_FIXED_PARTITION_LABEL(storage))
 
 static struct nvs_fs fs = {
 	.sector_size = NVS_SECTOR_SIZE,
@@ -43,7 +46,7 @@ static struct nvs_fs fs = {
 int lwm2m_os_init(void)
 {
 	/* Initialize storage */
-	return nvs_init(&fs, DT_FLASH_DEV_NAME);
+	return nvs_init(&fs, DT_CHOSEN_ZEPHYR_FLASH_CONTROLLER_LABEL);
 }
 
 /* Memory management. */
@@ -85,7 +88,7 @@ void lwm2m_os_sys_reset(void)
 
 uint32_t lwm2m_os_rand_get(void)
 {
-	return sys_rand32_get();
+	return k_cycle_get_32();
 }
 
 /* Non volatile storage */
@@ -133,7 +136,7 @@ static int32_t get_timeout_value(int32_t timeout,
 	 * max_timeout_ms = (int max - 1 / ticks per sec) * 1000
 	 */
 	static const int32_t max_timeout_ms =
-		K_SECONDS((INT32_MAX - 1) / CONFIG_SYS_CLOCK_TICKS_PER_SEC);
+		(INT32_MAX - 1) / CONFIG_SYS_CLOCK_TICKS_PER_SEC * MSEC_PER_SEC;
 
 	/* Avoid requesting timeouts larger than max_timeout_ms,
 	 * or they will expire immediately.
@@ -171,7 +174,7 @@ void *lwm2m_os_timer_get(lwm2m_os_timer_handler_t handler)
 {
 	struct lwm2m_work *work = NULL;
 
-	u32_t key = irq_lock();
+	uint32_t key = irq_lock();
 
 	/* Find free delayed work */
 	for (int i = 0; i < ARRAY_SIZE(lwm2m_works); i++) {
@@ -242,7 +245,7 @@ int32_t lwm2m_os_timer_remaining(void *timer)
 
 LOG_MODULE_REGISTER(lwm2m, CONFIG_LOG_DEFAULT_LEVEL);
 
-static const u8_t log_level_lut[] = {
+static const uint8_t log_level_lut[] = {
 	LOG_LEVEL_NONE, /* LWM2M_LOG_LEVEL_NONE */
 	LOG_LEVEL_ERR, /* LWM2M_LOG_LEVEL_ERR */
 	LOG_LEVEL_WRN, /* LWM2M_LOG_LEVEL_WRN */
@@ -271,8 +274,21 @@ void lwm2m_os_log(int level, const char *fmt, ...)
 		va_list ap;
 
 		va_start(ap, fmt);
-		log_generic(src_level, fmt, ap);
+		log_generic(src_level, fmt, ap, LOG_STRDUP_SKIP);
 		va_end(ap);
+	}
+}
+
+void lwm2m_os_logdump(const char *str, const void *data, size_t len)
+{
+	if (IS_ENABLED(CONFIG_LOG)) {
+		int level = LOG_LEVEL_INF;
+		struct log_msg_ids src_level = {
+			.level = log_level_lut[level],
+			.domain_id = CONFIG_LOG_DOMAIN_ID,
+			.source_id = LOG_CURRENT_MODULE_ID()
+		};
+		log_hexdump(str, data, len, src_level);
 	}
 }
 
@@ -280,7 +296,7 @@ int lwm2m_os_bsdlib_init(void)
 {
 	int err;
 
-	err = bsdlib_init();
+	err = nrf_modem_lib_init(NORMAL_MODE);
 
 	switch (err) {
 	case MODEM_DFU_RESULT_OK:
@@ -301,7 +317,7 @@ int lwm2m_os_bsdlib_init(void)
 		lwm2m_os_log(LOG_LEVEL_ERR, "Fatal error.");
 		break;
 	case -1:
-		lwm2m_os_log(LOG_LEVEL_ERR, "Could not initialize bsdlib.");
+		lwm2m_os_log(LOG_LEVEL_ERR, "Could not initialize modem library.");
 		lwm2m_os_log(LOG_LEVEL_ERR, "Fatal error.");
 		break;
 	default:
@@ -313,7 +329,7 @@ int lwm2m_os_bsdlib_init(void)
 
 int lwm2m_os_bsdlib_shutdown(void)
 {
-	return bsdlib_shutdown();
+	return nrf_modem_lib_shutdown();
 }
 
 /* AT command module abstractions. */
@@ -612,11 +628,28 @@ int lwm2m_os_download_start(const char *file, size_t from)
 	return download_client_start(&http_downloader, file, from);
 }
 
+int lwm2m_os_download_file_size_get(size_t *size)
+{
+	return download_client_file_size_get(&http_downloader, size);
+}
+
 /* LTE LC module abstractions. */
 
 int lwm2m_os_lte_link_up(void)
 {
-	return lte_lc_init_and_connect();
+	int err;
+	static bool initialized;
+
+	if (!initialized) {
+		initialized = true;
+
+		err = lte_lc_init();
+		if (err) {
+			return err;
+		}
+	}
+
+	return lte_lc_connect();
 }
 
 int lwm2m_os_lte_link_down(void)
@@ -627,18 +660,6 @@ int lwm2m_os_lte_link_down(void)
 int lwm2m_os_lte_power_down(void)
 {
 	return lte_lc_power_off();
-}
-
-/* PDN management module abstractions. */
-
-void lwm2m_os_pdn_disconnect(int pdn_fd)
-{
-	pdn_disconnect(pdn_fd);
-}
-
-int lwm2m_os_pdn_init_and_connect(const char *apn_name)
-{
-	return pdn_init_and_connect((char *)apn_name);
 }
 
 #ifndef ENOKEY
@@ -661,6 +682,8 @@ int lwm2m_os_pdn_init_and_connect(const char *apn_name)
 int lwm2m_os_errno(void)
 {
 	switch (errno) {
+	case 0:
+		return 0;
 	case EPERM:
 		return NRF_EPERM;
 	case ENOENT:
@@ -733,4 +756,85 @@ int lwm2m_os_errno(void)
 		__ASSERT(false, "Untranslated errno %d", errno);
 		return 0xDEADBEEF;
 	}
+}
+
+const char *lwm2m_os_strerror(void)
+{
+	return strerror(errno);
+}
+
+int lwm2m_os_sec_ca_chain_exists(uint32_t sec_tag, bool *exists,
+				 uint8_t *flags)
+{
+	return modem_key_mgmt_exists(sec_tag,
+		MODEM_KEY_MGMT_CRED_TYPE_CA_CHAIN, exists, flags);
+}
+
+int lwm2m_os_sec_ca_chain_cmp(uint32_t sec_tag, const void *buf, size_t len)
+{
+	return modem_key_mgmt_cmp(sec_tag,
+		MODEM_KEY_MGMT_CRED_TYPE_CA_CHAIN, buf, len);
+}
+
+int lwm2m_os_sec_ca_chain_write(uint32_t sec_tag, const void *buf, size_t len)
+{
+	return modem_key_mgmt_write(sec_tag,
+		MODEM_KEY_MGMT_CRED_TYPE_CA_CHAIN, buf, len);
+}
+
+int lwm2m_os_sec_psk_exists(uint32_t sec_tag, bool *exists,
+			    uint8_t *perm_flags)
+{
+	return modem_key_mgmt_exists(sec_tag, MODEM_KEY_MGMT_CRED_TYPE_PSK,
+				     exists, perm_flags);
+}
+
+int lwm2m_os_sec_psk_write(uint32_t sec_tag, const void *buf, uint16_t len)
+{
+	return modem_key_mgmt_write(sec_tag, MODEM_KEY_MGMT_CRED_TYPE_PSK, buf,
+				    len);
+}
+
+int lwm2m_os_sec_psk_delete(uint32_t sec_tag)
+{
+	char xoperid[20];
+	char oper_id = 0;
+
+	int code = at_cmd_write("AT%XOPERID", xoperid, sizeof(xoperid),
+				(enum at_cmd_state *)NULL);
+
+	/* Expected result: "%XOPERID: <oper_id>" */
+	if ((code == 0) && (strncmp(xoperid, "%XOPERID: ", 10) == 0) &&
+	    (strlen(xoperid) >= 11)) {
+		oper_id = xoperid[10] - '0';
+	}
+
+	/* Delete only for specific operators. */
+	if ((oper_id == 2) || (oper_id == 3) || (oper_id == 4) ||
+	    (oper_id == 5)) {
+		return modem_key_mgmt_delete(sec_tag,
+					     MODEM_KEY_MGMT_CRED_TYPE_PSK);
+	}
+
+	return 0;
+}
+
+int lwm2m_os_sec_identity_exists(uint32_t sec_tag, bool *exists,
+				 uint8_t *perm_flags)
+{
+	return modem_key_mgmt_exists(sec_tag,
+		MODEM_KEY_MGMT_CRED_TYPE_IDENTITY, exists, perm_flags);
+}
+
+int lwm2m_os_sec_identity_write(uint32_t sec_tag, const void *buf,
+				uint16_t len)
+{
+	return modem_key_mgmt_write(sec_tag, MODEM_KEY_MGMT_CRED_TYPE_IDENTITY,
+				    buf, len);
+}
+
+int lwm2m_os_sec_identity_delete(uint32_t sec_tag)
+{
+	return modem_key_mgmt_delete(sec_tag,
+				     MODEM_KEY_MGMT_CRED_TYPE_IDENTITY);
 }

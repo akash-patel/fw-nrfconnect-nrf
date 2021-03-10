@@ -5,10 +5,10 @@ Using MCUboot in nRF Connect SDK
 
 See :doc:`readme-zephyr` for general information on how to integrate MCUboot with Zephyr.
 
-nRF Connect SDK's `fork of MCUboot <https://github.com/NordicPlayground/fw-nrfconnect-mcuboot>`_ provides additional functionality that is available when MCUboot is included.
-This functionality is implemented in the files in the ``zephyr`` subfolder.
+nRF Connect SDK provides additional functionality that is available when MCUboot is included.
+This functionality is implemented in the files in the ``modules/mcuboot`` subfolder in the `sdk-nrf`_ repository.
 
-To include MCUboot in your nRF Connect SDK application, enable :option:`zephyr:CONFIG_BOOTLOADER_MCUBOOT`.
+To include MCUboot in your nRF Connect SDK application, enable :option:`CONFIG_BOOTLOADER_MCUBOOT`.
 
 When you build your application with this option set, the following files that can be used for firmware over-the-air (FOTA) upgrades are automatically generated:
 
@@ -28,4 +28,6 @@ When you build your application with this option set, the following files that c
   It will not trigger a DFU procedure.
 
 * :file:`app_moved_test_update.hex` - Same as :file:`app_test_update.hex` except that it is linked against the address used to store the upgrade candidates.
-  When this file is flashed to the device, MCUboot will trigger the DFU procedure upon reboot.
+  When this file is programmed to the device, MCUboot will trigger the DFU procedure upon reboot.
+
+.. _`sdk-nrf`: https://github.com/nrfconnect/sdk-nrf

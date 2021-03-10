@@ -1,11 +1,11 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <kernel.h>
-#include <misc/printk.h>
+#include <sys/printk.h>
 #include <string.h>
 #include <zephyr/types.h>
 
@@ -19,21 +19,21 @@
 
 #include <logging/log.h>
 
-LOG_MODULE_REGISTER(bt_gatt_throughput, CONFIG_BT_GATT_THROUGHPUT_LOG_LEVEL);
+LOG_MODULE_REGISTER(bt_throughput, CONFIG_BT_THROUGHPUT_LOG_LEVEL);
 
-static struct bt_gatt_throughput_metrics met;
-static const struct bt_gatt_throughput_cb *callbacks;
+static struct bt_throughput_metrics met;
+static const struct bt_throughput_cb *callbacks;
 
-static u8_t read_fn(struct bt_conn *conn, u8_t err,
+static uint8_t read_fn(struct bt_conn *conn, uint8_t err,
 		    struct bt_gatt_read_params *params, const void *data,
-		    u16_t len)
+		    uint16_t len)
 {
-	struct bt_gatt_throughput_metrics metrics;
+	struct bt_throughput_metrics metrics;
 
-	memset(&metrics, 0, sizeof(struct bt_gatt_throughput_metrics));
+	memset(&metrics, 0, sizeof(struct bt_throughput_metrics));
 
 	if (data) {
-		len = MIN(len, sizeof(struct bt_gatt_throughput_metrics));
+		len = MIN(len, sizeof(struct bt_throughput_metrics));
 		memcpy(&metrics, data, len);
 
 		if (callbacks->data_read) {
@@ -46,14 +46,14 @@ static u8_t read_fn(struct bt_conn *conn, u8_t err,
 
 static ssize_t write_callback(struct bt_conn *conn,
 			      const struct bt_gatt_attr *attr, const void *buf,
-			      u16_t len, u16_t offset, u8_t flags)
+			      uint16_t len, uint16_t offset, uint8_t flags)
 {
-	static u32_t clock_cycles;
-	static u32_t kb;
+	static uint32_t clock_cycles;
+	static uint32_t kb;
 
-	u64_t delta;
+	uint64_t delta;
 
-	struct bt_gatt_throughput_metrics *met_data = attr->user_data;
+	struct bt_throughput_metrics *met_data = attr->user_data;
 
 	delta = k_cycle_get_32() - clock_cycles;
 	delta = k_cyc_to_ns_floor64(delta);
@@ -69,7 +69,7 @@ static ssize_t write_callback(struct bt_conn *conn,
 		met_data->write_count++;
 		met_data->write_len += len;
 		met_data->write_rate =
-		    ((u64_t)met_data->write_len << 3) * 1000000000 / delta;
+		    ((uint64_t)met_data->write_len << 3) * 1000000000 / delta;
 	}
 
 	LOG_DBG("Received data.");
@@ -83,11 +83,11 @@ static ssize_t write_callback(struct bt_conn *conn,
 
 static ssize_t read_callback(struct bt_conn *conn,
 			     const struct bt_gatt_attr *attr, void *buf,
-			     u16_t len, u16_t offset)
+			     uint16_t len, uint16_t offset)
 {
-	const struct bt_gatt_throughput_metrics *metrics = attr->user_data;
+	const struct bt_throughput_metrics *metrics = attr->user_data;
 
-	len = MIN(sizeof(struct bt_gatt_throughput_metrics), len);
+	len = MIN(sizeof(struct bt_throughput_metrics), len);
 
 	if (callbacks->data_send) {
 		callbacks->data_send(metrics);
@@ -108,8 +108,8 @@ BT_GATT_PRIMARY_SERVICE(BT_UUID_THROUGHPUT),
 		read_callback, write_callback, &met),
 );
 
-int bt_gatt_throughput_init(struct bt_gatt_throughput *throughput,
-			    const struct bt_gatt_throughput_cb *cb)
+int bt_throughput_init(struct bt_throughput *throughput,
+		       const struct bt_throughput_cb *cb)
 {
 	if (!throughput || !cb) {
 		return -EINVAL;
@@ -120,15 +120,15 @@ int bt_gatt_throughput_init(struct bt_gatt_throughput *throughput,
 	return 0;
 }
 
-int bt_gatt_throughput_handles_assign(struct bt_gatt_dm *dm,
-				      struct bt_gatt_throughput *throughput)
+int bt_throughput_handles_assign(struct bt_gatt_dm *dm,
+				 struct bt_throughput *throughput)
 {
-	const struct bt_gatt_attr *gatt_service_attr =
+	const struct bt_gatt_dm_attr *gatt_service_attr =
 			bt_gatt_dm_service_get(dm);
 	const struct bt_gatt_service_val *gatt_service =
 			bt_gatt_dm_attr_service_val(gatt_service_attr);
-	const struct bt_gatt_attr *gatt_chrc;
-	const struct bt_gatt_attr *gatt_desc;
+	const struct bt_gatt_dm_attr *gatt_chrc;
+	const struct bt_gatt_dm_attr *gatt_desc;
 
 	if (bt_uuid_cmp(gatt_service->uuid, BT_UUID_THROUGHPUT)) {
 		return -ENOTSUP;
@@ -157,7 +157,7 @@ int bt_gatt_throughput_handles_assign(struct bt_gatt_dm *dm,
 	return 0;
 }
 
-int bt_gatt_throughput_read(struct bt_gatt_throughput *throughput)
+int bt_throughput_read(struct bt_throughput *throughput)
 {
 	int err;
 
@@ -174,8 +174,8 @@ int bt_gatt_throughput_read(struct bt_gatt_throughput *throughput)
 	return err;
 }
 
-int bt_gatt_throughput_write(struct bt_gatt_throughput *throughput,
-			     const u8_t *data, u16_t len)
+int bt_throughput_write(struct bt_throughput *throughput,
+			const uint8_t *data, uint16_t len)
 {
 	return bt_gatt_write_without_response(throughput->conn,
 					      throughput->char_handle,

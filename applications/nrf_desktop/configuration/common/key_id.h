@@ -1,14 +1,14 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #ifndef _KEY_ID_H_
 #define _KEY_ID_H_
 
 #include <zephyr/types.h>
-#include <misc/util.h>
+#include <sys/util.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -25,7 +25,7 @@ extern "C" {
 #define _ROW_BITS(_row) ((_row & BIT_MASK(_ROW_SIZE)) << _ROW_POS)
 
 
-#define KEY_ID(_col, _row) ((u16_t)(_COL_BITS(_col) | _ROW_BITS(_row)))
+#define KEY_ID(_col, _row) ((uint16_t)(_COL_BITS(_col) | _ROW_BITS(_row)))
 
 #define KEY_COL(_keyid) ((_keyid >> _COL_POS) & BIT_MASK(_COL_SIZE))
 #define KEY_ROW(_keyid) ((_keyid >> _ROW_POS) & BIT_MASK(_ROW_SIZE))

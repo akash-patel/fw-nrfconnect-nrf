@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 /**
@@ -35,10 +35,6 @@ struct bt_mesh_dtt_srv;
 #define BT_MESH_DTT_SRV_INIT(_update)                                          \
 	{                                                                      \
 		.update = _update,                                             \
-		.pub = {.update = _bt_mesh_dtt_srv_update_handler,             \
-			.msg = NET_BUF_SIMPLE(BT_MESH_MODEL_BUF_LEN(           \
-				BT_MESH_DTT_OP_STATUS,                         \
-				BT_MESH_DTT_MSG_LEN_STATUS)) }                 \
 	}
 
 /** @def BT_MESH_MODEL_DTT_SRV
@@ -57,7 +53,7 @@ struct bt_mesh_dtt_srv;
 /** Generic Default Transition Time server instance. */
 struct bt_mesh_dtt_srv {
 	/** Current transition time in milliseconds */
-	u32_t transition_time;
+	uint32_t transition_time;
 
 	/** @brief Update handler for the transition time state.
 	 *
@@ -67,18 +63,23 @@ struct bt_mesh_dtt_srv {
 	 * @param[in] ctx Context of the set message that caused the update, or
 	 * NULL if the update was not a result of a set message.
 	 * @param[in] old_transition_time The transition time prior to the
-	 * update.
+	 * update, in milliseconds.
 	 * @param[in] new_transition_time The new transition time after the
-	 * update.
+	 * update, in milliseconds.
 	 */
 	void (*const update)(struct bt_mesh_dtt_srv *srv,
 			     struct bt_mesh_msg_ctx *ctx,
-			     u32_t old_transition_time,
-			     u32_t new_transition_time);
+			     uint32_t old_transition_time,
+			     uint32_t new_transition_time);
 	/** Composition data Model entry pointer. */
 	struct bt_mesh_model *model;
 	/** Model publish parameters. */
 	struct bt_mesh_model_pub pub;
+	/* Publication buffer */
+	struct net_buf_simple pub_buf;
+	/* Publication data */
+	uint8_t pub_data[BT_MESH_MODEL_BUF_LEN(BT_MESH_DTT_OP_STATUS,
+					       BT_MESH_DTT_MSG_LEN_STATUS)];
 };
 
 /** @brief Set the Default Transition Time of the DTT server.
@@ -88,9 +89,9 @@ struct bt_mesh_dtt_srv {
  * publish.
  *
  * @param[in] srv Server to set the DTT of.
- * @param[in] transition_time New Default Transition Time.
+ * @param[in] transition_time New Default Transition Time, in milliseconds.
  */
-void bt_mesh_dtt_srv_set(struct bt_mesh_dtt_srv *srv, u32_t transition_time);
+void bt_mesh_dtt_srv_set(struct bt_mesh_dtt_srv *srv, uint32_t transition_time);
 
 /** @brief Publish the current transition time.
  *
@@ -99,8 +100,6 @@ void bt_mesh_dtt_srv_set(struct bt_mesh_dtt_srv *srv, u32_t transition_time);
  * configured parameters.
  *
  * @retval 0 Successfully published the current transition time.
- * @retval -ENOTSUP A message context was not provided and publishing is not
- * supported.
  * @retval -EADDRNOTAVAIL A message context was not provided and publishing is
  * not configured.
  * @retval -EAGAIN The device has not been provisioned.
@@ -146,7 +145,6 @@ bt_mesh_dtt_srv_transition_get(struct bt_mesh_model *mod,
 /** @cond INTERNAL_HIDDEN */
 extern const struct bt_mesh_model_op _bt_mesh_dtt_srv_op[];
 extern const struct bt_mesh_model_cb _bt_mesh_dtt_srv_cb;
-int _bt_mesh_dtt_srv_update_handler(struct bt_mesh_model *model);
 /** @endcond */
 
 #ifdef __cplusplus

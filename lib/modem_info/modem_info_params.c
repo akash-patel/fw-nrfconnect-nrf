@@ -1,14 +1,14 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <zephyr.h>
 #include <string.h>
 #include <stdlib.h>
-#include <modem_info.h>
-#include <at_cmd_parser/at_params.h>
+#include <modem/modem_info.h>
+#include <modem/at_params.h>
 #include <logging/log.h>
 
 LOG_MODULE_REGISTER(modem_info_params);
@@ -32,6 +32,7 @@ int modem_info_params_init(struct modem_param_info *modem)
 	modem->network.nbiot_mode.type		= MODEM_INFO_NBIOT_MODE;
 	modem->network.gps_mode.type		= MODEM_INFO_GPS_MODE;
 	modem->network.date_time.type		= MODEM_INFO_DATE_TIME;
+	modem->network.apn.type			= MODEM_INFO_APN;
 
 	modem->sim.uicc.type			= MODEM_INFO_UICC;
 	modem->sim.iccid.type			= MODEM_INFO_ICCID;
@@ -109,7 +110,9 @@ static int modem_data_get(struct lte_param *param)
 	}
 
 	if (data_type == AT_PARAM_TYPE_STRING) {
-		ret = modem_info_string_get(param->type, param->value_string);
+		ret = modem_info_string_get(param->type,
+				param->value_string,
+				sizeof(param->value_string));
 		if (ret < 0) {
 			LOG_ERR("Link data not obtained: %d %d", param->type, ret);
 			return ret;
@@ -144,6 +147,7 @@ int modem_info_params_get(struct modem_param_info *modem)
 		ret += modem_data_get(&modem->network.lte_mode);
 		ret += modem_data_get(&modem->network.nbiot_mode);
 		ret += modem_data_get(&modem->network.gps_mode);
+		ret += modem_data_get(&modem->network.apn);
 
 		if (IS_ENABLED(CONFIG_MODEM_INFO_ADD_DATE_TIME)) {
 			ret += modem_data_get(&modem->network.date_time);

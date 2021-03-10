@@ -2,14 +2,13 @@
 #
 # Copyright (c) 2018 Nordic Semiconductor ASA
 #
-# SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 
 
-from subprocess import Popen, PIPE, STDOUT, check_output
+from subprocess import check_output
 import re
 import sys
 import argparse
-import ecdsa
 
 
 def get_ecdsa_signature(der, clength):
@@ -27,35 +26,37 @@ def get_ecdsa_signature(der, clength):
     # The following code parses the output of openssl asnparse which prints
     # the values in hex, together with human-readble metadata.
 
-    stdout = check_output(["openssl", "asn1parse", "-inform", "der"], input=der)
-    sig = b"".join([bytes.fromhex(re.search(r"(?<=\:)([0-9A-F]+)", num)[0]).ljust(clength, b'\0') \
-                    for num in re.findall(r"INTEGER *\:[0-9A-F]+", stdout.decode())])
+    # Disable pylint error as 'input' keyword has specific handling in 'check_output'
+    # pylint: disable=unexpected-keyword-arg
+    stdout = check_output(['openssl', 'asn1parse', '-inform', 'der'], input=der)
+    sig = b''.join([bytes.fromhex(re.search(r'(?<=\:)([0-9A-F]+)', num)[0]).ljust(clength, b'\0') \
+                    for num in re.findall(r'INTEGER *\:[0-9A-F]+', stdout.decode())])
 
-    assert(len(sig) == 2*clength)
+    assert len(sig) == 2*clength
     return sig
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Decode DER format using OpenSSL.",
+        description='Decode DER format using OpenSSL.',
         formatter_class=argparse.RawDescriptionHelpFormatter)
 
-    parser.add_argument("-a", "--alg", required=True, choices=["rsa", "ecdsa"],
-                        help="Expected algorithm")
-    parser.add_argument("-c", "--contents", required=True, choices=["signature"],
-                        help="Expected contents")
-    parser.add_argument("-i", "--in", "-in", required=False, dest="infile",
+    parser.add_argument('-a', '--alg', required=True, choices=['rsa', 'ecdsa'],
+                        help='Expected algorithm')
+    parser.add_argument('-c', '--contents', required=True, choices=['signature'],
+                        help='Expected contents')
+    parser.add_argument('-i', '--in', '-in', required=False, dest='infile',
                         type=argparse.FileType('rb'), default=sys.stdin.buffer,
-                        help="Parse the contents of the specified file instead of stdin.")
+                        help='Parse the contents of the specified file instead of stdin.')
 
     args = parser.parse_args()
 
     return args
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     args = parse_args()
-    assert(args.alg == "ecdsa")  # Only ecdsa is currently supported.
-    if args.alg == "ecdsa":
-        if args.contents == "signature":
+    assert args.alg == 'ecdsa'  # Only ecdsa is currently supported.
+    if args.alg == 'ecdsa':
+        if args.contents == 'signature':
             sys.stdout.buffer.write(get_ecdsa_signature(args.infile.read(), 32))

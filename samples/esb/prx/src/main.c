@@ -1,41 +1,44 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
-#include <clock_control.h>
-#include <gpio.h>
+#include <drivers/clock_control.h>
+#include <drivers/clock_control/nrf_clock_control.h>
+#include <drivers/gpio.h>
 #include <irq.h>
 #include <logging/log.h>
 #include <nrf.h>
-#include <nrf_esb.h>
+#include <esb.h>
 #include <zephyr.h>
 #include <zephyr/types.h>
 
-LOG_MODULE_REGISTER(esb_prx);
+LOG_MODULE_REGISTER(esb_prx, CONFIG_ESB_PRX_APP_LOG_LEVEL);
 
 #define LED_ON 0
 #define LED_OFF 1
 
-static struct device *led_port;
-static struct nrf_esb_payload rx_payload;
-static struct nrf_esb_payload tx_payload = NRF_ESB_CREATE_PAYLOAD(0,
+static const struct device *led_port;
+static struct esb_payload rx_payload;
+static struct esb_payload tx_payload = ESB_CREATE_PAYLOAD(0,
 	0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17);
 
 static int leds_init(void)
 {
-	led_port = device_get_binding(DT_ALIAS_LED0_GPIOS_CONTROLLER);
+	led_port = device_get_binding(DT_GPIO_LABEL(DT_ALIAS(led0), gpios));
 	if (!led_port) {
 		LOG_ERR("Could not bind to LED port %s",
-			DT_ALIAS_LED0_GPIOS_CONTROLLER);
+			DT_GPIO_LABEL(DT_ALIAS(led0), gpios));
 		return -EIO;
 	}
 
-	const u8_t pins[] = {DT_ALIAS_LED0_GPIOS_PIN, DT_ALIAS_LED1_GPIOS_PIN,
-			     DT_ALIAS_LED2_GPIOS_PIN, DT_ALIAS_LED3_GPIOS_PIN};
+	const uint8_t pins[] = {DT_GPIO_PIN(DT_ALIAS(led0), gpios),
+			     DT_GPIO_PIN(DT_ALIAS(led1), gpios),
+			     DT_GPIO_PIN(DT_ALIAS(led2), gpios),
+			     DT_GPIO_PIN(DT_ALIAS(led3), gpios)};
 
 	for (size_t i = 0; i < ARRAY_SIZE(pins); i++) {
-		int err = gpio_pin_configure(led_port, pins[i], GPIO_DIR_OUT);
+		int err = gpio_pin_configure(led_port, pins[i], GPIO_OUTPUT);
 
 		if (err) {
 			LOG_ERR("Unable to configure LED%u, err %d.", i, err);
@@ -47,33 +50,41 @@ static int leds_init(void)
 	return 0;
 }
 
-static void leds_update(u8_t value)
+static void leds_update(uint8_t value)
 {
 	bool led0_status = !(value % 8 > 0 && value % 8 <= 4);
 	bool led1_status = !(value % 8 > 1 && value % 8 <= 5);
 	bool led2_status = !(value % 8 > 2 && value % 8 <= 6);
 	bool led3_status = !(value % 8 > 3);
 
+	gpio_port_pins_t mask =
+		1 << DT_GPIO_PIN(DT_ALIAS(led0), gpios) |
+		1 << DT_GPIO_PIN(DT_ALIAS(led1), gpios) |
+		1 << DT_GPIO_PIN(DT_ALIAS(led2), gpios) |
+		1 << DT_GPIO_PIN(DT_ALIAS(led3), gpios);
+
+	gpio_port_value_t val =
+		led0_status << DT_GPIO_PIN(DT_ALIAS(led0), gpios) |
+		led1_status << DT_GPIO_PIN(DT_ALIAS(led1), gpios) |
+		led2_status << DT_GPIO_PIN(DT_ALIAS(led2), gpios) |
+		led3_status << DT_GPIO_PIN(DT_ALIAS(led3), gpios);
+
 	if (led_port != NULL) {
-		gpio_write(led_port, GPIO_ACCESS_BY_PORT, 0,
-			   led0_status << DT_ALIAS_LED0_GPIOS_PIN |
-			   led1_status << DT_ALIAS_LED1_GPIOS_PIN |
-			   led2_status << DT_ALIAS_LED2_GPIOS_PIN |
-			   led3_status << DT_ALIAS_LED3_GPIOS_PIN);
+		gpio_port_set_masked_raw(led_port, mask, val);
 	}
 }
 
-void esb_event_handler(struct nrf_esb_evt const *event)
+void event_handler(struct esb_evt const *event)
 {
 	switch (event->evt_id) {
-	case NRF_ESB_EVENT_TX_SUCCESS:
+	case ESB_EVENT_TX_SUCCESS:
 		LOG_DBG("TX SUCCESS EVENT");
 		break;
-	case NRF_ESB_EVENT_TX_FAILED:
+	case ESB_EVENT_TX_FAILED:
 		LOG_DBG("TX FAILED EVENT");
 		break;
-	case NRF_ESB_EVENT_RX_RECEIVED:
-		if (nrf_esb_read_rx_payload(&rx_payload) == 0) {
+	case ESB_EVENT_RX_RECEIVED:
+		if (esb_read_rx_payload(&rx_payload) == 0) {
 			LOG_DBG("Packet received, len %d : "
 				"0x%02x, 0x%02x, 0x%02x, 0x%02x, "
 				"0x%02x, 0x%02x, 0x%02x, 0x%02x",
@@ -94,58 +105,70 @@ void esb_event_handler(struct nrf_esb_evt const *event)
 int clocks_start(void)
 {
 	int err;
-	struct device *hfclk;
+	int res;
+	struct onoff_manager *clk_mgr;
+	struct onoff_client clk_cli;
 
-	hfclk = device_get_binding(DT_INST_0_NORDIC_NRF_CLOCK_LABEL "_16M");
-	if (!hfclk) {
-		LOG_ERR("HF Clock device not found!");
-		return -EIO;
+	clk_mgr = z_nrf_clock_control_get_onoff(CLOCK_CONTROL_NRF_SUBSYS_HF);
+	if (!clk_mgr) {
+		LOG_ERR("Unable to get the Clock manager");
+		return -ENXIO;
 	}
 
-	err = clock_control_on(hfclk, NULL);
-	if (err && (err != -EINPROGRESS)) {
-		LOG_ERR("HF clock start fail: %d", err);
+	sys_notify_init_spinwait(&clk_cli.notify);
+
+	err = onoff_request(clk_mgr, &clk_cli);
+	if (err < 0) {
+		LOG_ERR("Clock request failed: %d", err);
 		return err;
 	}
+
+	do {
+		err = sys_notify_fetch_result(&clk_cli.notify, &res);
+		if (!err && res) {
+			LOG_ERR("Clock could not be started: %d", res);
+			return res;
+		}
+	} while (err);
 
 	LOG_DBG("HF clock started");
 	return 0;
 }
 
-int esb_init(void)
+int esb_initialize(void)
 {
 	int err;
 	/* These are arbitrary default addresses. In end user products
 	 * different addresses should be used for each set of devices.
 	 */
-	u8_t base_addr_0[4] = {0xE7, 0xE7, 0xE7, 0xE7};
-	u8_t base_addr_1[4] = {0xC2, 0xC2, 0xC2, 0xC2};
-	u8_t addr_prefix[8] = {0xE7, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7, 0xC8};
+	uint8_t base_addr_0[4] = {0xE7, 0xE7, 0xE7, 0xE7};
+	uint8_t base_addr_1[4] = {0xC2, 0xC2, 0xC2, 0xC2};
+	uint8_t addr_prefix[8] = {0xE7, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7, 0xC8};
 
-	struct nrf_esb_config config = NRF_ESB_DEFAULT_CONFIG;
+	struct esb_config config = ESB_DEFAULT_CONFIG;
 
-	config.protocol = NRF_ESB_PROTOCOL_ESB_DPL;
-	config.bitrate = NRF_ESB_BITRATE_2MBPS;
-	config.mode = NRF_ESB_MODE_PRX;
-	config.event_handler = esb_event_handler;
+	config.protocol = ESB_PROTOCOL_ESB_DPL;
+	config.bitrate = ESB_BITRATE_2MBPS;
+	config.mode = ESB_MODE_PRX;
+	config.event_handler = event_handler;
 	config.selective_auto_ack = true;
 
-	err = nrf_esb_init(&config);
+	err = esb_init(&config);
 	if (err) {
 		return err;
 	}
 
-	err = nrf_esb_set_base_address_0(base_addr_0);
+	err = esb_set_base_address_0(base_addr_0);
 	if (err) {
 		return err;
 	}
 
-	err = nrf_esb_set_base_address_1(base_addr_1);
+	err = esb_set_base_address_1(base_addr_1);
 	if (err) {
 		return err;
 	}
 
-	err = nrf_esb_set_prefixes(addr_prefix, ARRAY_SIZE(addr_prefix));
+	err = esb_set_prefixes(addr_prefix, ARRAY_SIZE(addr_prefix));
 	if (err) {
 		return err;
 	}
@@ -166,7 +189,7 @@ void main(void)
 
 	leds_init();
 
-	err = esb_init();
+	err = esb_initialize();
 	if (err) {
 		LOG_ERR("ESB initialization failed, err %d", err);
 		return;
@@ -174,7 +197,7 @@ void main(void)
 
 	LOG_INF("Initialization complete");
 
-	err = nrf_esb_write_payload(&tx_payload);
+	err = esb_write_payload(&tx_payload);
 	if (err) {
 		LOG_ERR("Write payload, err %d", err);
 		return;
@@ -182,13 +205,12 @@ void main(void)
 
 	LOG_INF("Setting up for packet receiption");
 
-	err = nrf_esb_start_rx();
+	err = esb_start_rx();
 	if (err) {
 		LOG_ERR("RX setup failed, err %d", err);
 		return;
 	}
 
-	while (1) {
-		/* do nothing */
-	}
+	/* return to idle thread */
+	return;
 }

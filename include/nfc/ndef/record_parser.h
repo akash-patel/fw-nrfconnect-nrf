@@ -1,14 +1,14 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 #ifndef NFC_NDEF_RECORD_PARSER_H_
 #define NFC_NDEF_RECORD_PARSER_H_
 
 #include <stdint.h>
 #include <zephyr/types.h>
-#include <nfc/ndef/nfc_ndef_record.h>
+#include <nfc/ndef/record.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -43,8 +43,8 @@ extern "C" {
 int nfc_ndef_record_parse(struct nfc_ndef_bin_payload_desc *bin_pay_desc,
 			  struct nfc_ndef_record_desc *rec_desc,
 			  enum nfc_ndef_record_location *record_location,
-			  const u8_t *nfc_data,
-			  u32_t *nfc_data_len);
+			  const uint8_t *nfc_data,
+			  uint32_t *nfc_data_len);
 
 /** @brief Print the parsed contents of the NDEF record.
  *
@@ -53,7 +53,7 @@ int nfc_ndef_record_parse(struct nfc_ndef_bin_payload_desc *bin_pay_desc,
  *                      be printed.
  *
  */
-void nfc_ndef_record_printout(u32_t num,
+void nfc_ndef_record_printout(uint32_t num,
 			      const struct nfc_ndef_record_desc *rec_desc);
 
 /**

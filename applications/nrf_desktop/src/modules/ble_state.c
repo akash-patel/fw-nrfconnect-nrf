@@ -1,22 +1,25 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <zephyr/types.h>
-#include <misc/reboot.h>
+#include <power/reboot.h>
+#include <sys/byteorder.h>
 
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/conn.h>
 #include <bluetooth/gatt.h>
 #include <bluetooth/hci.h>
+#include <bluetooth/hci_vs.h>
 
 #include "ble_event.h"
+#include "passkey_event.h"
 
-#ifdef CONFIG_BT_LL_NRFXLIB
-#include "ble_controller_hci_vs.h"
-#endif
+#ifdef CONFIG_BT_LL_SOFTDEVICE
+#include "sdc_hci_vs.h"
+#endif /* CONFIG_BT_LL_SOFTDEVICE */
 
 #define MODULE ble_state
 #include "module_state_event.h"
@@ -27,11 +30,12 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_DESKTOP_BLE_STATE_LOG_LEVEL);
 
 struct bond_find_data {
 	bt_addr_le_t peer_address;
-	u8_t peer_id;
-	u8_t peer_count;
+	uint8_t peer_id;
+	uint8_t peer_count;
 };
 
 static struct bt_conn *active_conn[CONFIG_BT_MAX_CONN];
+static bool passkey_input;
 
 
 static void bond_find(const struct bt_bond_info *info, void *user_data)
@@ -50,17 +54,78 @@ static void disconnect_peer(struct bt_conn *conn)
 {
 	int err = bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
 
-	if (err == -ENOTCONN) {
-		err = 0;
-	}
-	LOG_WRN("Device %s", err ? "failed to disconnect" : "disconnected");
-
-	if (err) {
+	if (err && (err != -ENOTCONN)) {
+		LOG_ERR("Failed to disconnect peer (err=%d)", err);
 		module_set_state(MODULE_STATE_ERROR);
+	} else {
+		LOG_INF("Peer disconnected");
 	}
 }
 
-static void connected(struct bt_conn *conn, u8_t error)
+static void send_passkey_req(bool active)
+{
+	__ASSERT_NO_MSG(IS_ENABLED(CONFIG_DESKTOP_BLE_ENABLE_PASSKEY));
+	__ASSERT_NO_MSG(!passkey_input || !active);
+
+	if (passkey_input != active) {
+		struct passkey_req_event *event = new_passkey_req_event();
+
+		event->active = active;
+		EVENT_SUBMIT(event);
+
+		passkey_input = active;
+	}
+}
+
+static void set_tx_power(struct bt_conn *conn)
+{
+	uint16_t conn_handle;
+
+	int err = bt_hci_get_conn_handle(conn, &conn_handle);
+
+	if (err) {
+		LOG_ERR("No connection handle (err %d)", err);
+	} else {
+		struct bt_hci_cp_vs_write_tx_power_level *cp;
+		struct bt_hci_rp_vs_write_tx_power_level *rp;
+		struct net_buf *buf;
+		struct net_buf *rsp = NULL;
+
+		buf = bt_hci_cmd_create(BT_HCI_OP_VS_WRITE_TX_POWER_LEVEL,
+					sizeof(*cp));
+		if (!buf) {
+			LOG_ERR("Cannot allocate buffer to set TX power");
+			return;
+		}
+
+		cp = net_buf_add(buf, sizeof(*cp));
+		cp->handle = sys_cpu_to_le16(conn_handle);
+		cp->handle_type = BT_HCI_VS_LL_HANDLE_TYPE_CONN;
+		cp->tx_power_level = CONFIG_DESKTOP_BLE_TX_PWR;
+
+		LOG_INF("Setting TX power to: %" PRId8, cp->tx_power_level);
+
+		err = bt_hci_cmd_send_sync(BT_HCI_OP_VS_WRITE_TX_POWER_LEVEL,
+					   buf, &rsp);
+		if (err) {
+			uint8_t reason = rsp ?
+			  ((struct bt_hci_rp_vs_write_tx_power_level *)rsp->data)->status : 0;
+
+			LOG_ERR("Cannot set TX power (err: %d reason 0x%02x)",
+				err, reason);
+		} else {
+			rp = (struct bt_hci_rp_vs_write_tx_power_level *)rsp->data;
+			LOG_INF("TX power returned by command: %" PRId8,
+				rp->selected_tx_power);
+		}
+
+		if (rsp) {
+			net_buf_unref(rsp);
+		}
+	}
+}
+
+static void connected(struct bt_conn *conn, uint8_t error)
 {
 	/* Make sure that connection will remain valid. */
 	bt_conn_ref(conn);
@@ -79,6 +144,13 @@ static void connected(struct bt_conn *conn, u8_t error)
 		LOG_WRN("Failed to connect to %s (%u)", log_strdup(addr_str),
 			error);
 		return;
+	}
+
+	/* For nrfxlib LL TX power level has to be set using HCI command.
+	 * The default value set in Kconfig has no effect.
+	 */
+	if (IS_ENABLED(CONFIG_BT_LL_SOFTDEVICE)) {
+		set_tx_power(conn);
 	}
 
 	LOG_INF("Connected to %s", log_strdup(addr_str));
@@ -147,7 +219,7 @@ disconnect:
 	disconnect_peer(conn);
 }
 
-static void disconnected(struct bt_conn *conn, u8_t reason)
+static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
 
@@ -175,11 +247,15 @@ static void disconnected(struct bt_conn *conn, u8_t reason)
 	event->id = conn;
 	event->state = PEER_STATE_DISCONNECTED;
 	EVENT_SUBMIT(event);
+
+	if (IS_ENABLED(CONFIG_DESKTOP_BLE_ENABLE_PASSKEY)) {
+		send_passkey_req(false);
+	}
 }
 
 static struct bt_gatt_exchange_params exchange_params;
 
-static void exchange_func(struct bt_conn *conn, u8_t err,
+static void exchange_func(struct bt_conn *conn, uint8_t err,
 			  struct bt_gatt_exchange_params *params)
 {
 	LOG_INF("MTU exchange done");
@@ -233,21 +309,37 @@ static void security_changed(struct bt_conn *conn, bt_security_t level,
 
 static bool le_param_req(struct bt_conn *conn, struct bt_le_conn_param *param)
 {
-	LOG_INF("Conn parameters request:"
-		"\n\tinterval (0x%04x, 0x%04x)\n\tsl %d\n\ttimeout %d",
-		param->interval_min, param->interval_max,
-		param->latency, param->timeout);
+	__ASSERT_NO_MSG(IS_ENABLED(CONFIG_BT_CENTRAL));
 
-	/* Accept the request */
-	return true;
+	struct ble_peer_conn_params_event *event =
+		new_ble_peer_conn_params_event();
+
+	event->id = conn;
+	event->interval_min = param->interval_min;
+	event->interval_max = param->interval_max;
+	event->latency = param->latency;
+	event->timeout = param->timeout;
+	event->updated = false;
+
+	EVENT_SUBMIT(event);
+
+	return false;
 }
 
-static void le_param_updated(struct bt_conn *conn, u16_t interval,
-			     u16_t latency, u16_t timeout)
+static void le_param_updated(struct bt_conn *conn, uint16_t interval,
+			     uint16_t latency, uint16_t timeout)
 {
-	LOG_INF("Conn parameters updated:"
-		"\n\tinterval 0x%04x\n\tlat %d\n\ttimeout %d\n",
-		interval, latency, timeout);
+	struct ble_peer_conn_params_event *event =
+		new_ble_peer_conn_params_event();
+
+	event->id = conn;
+	event->interval_min = interval;
+	event->interval_max = interval;
+	event->latency = latency;
+	event->timeout = timeout;
+	event->updated = true;
+
+	EVENT_SUBMIT(event);
 }
 
 static void bt_ready(int err)
@@ -259,24 +351,36 @@ static void bt_ready(int err)
 
 	LOG_INF("Bluetooth initialized");
 
-#ifdef CONFIG_BT_LL_NRFXLIB
-	hci_vs_cmd_llpm_mode_set_t *p_cmd_enable;
+#ifdef CONFIG_DESKTOP_BLE_USE_LLPM
+	sdc_hci_cmd_vs_llpm_mode_set_t *p_cmd_enable;
 
-	struct net_buf *buf = bt_hci_cmd_create(HCI_VS_OPCODE_CMD_LLPM_MODE_SET,
+	struct net_buf *buf = bt_hci_cmd_create(SDC_HCI_OPCODE_CMD_VS_LLPM_MODE_SET,
 						sizeof(*p_cmd_enable));
 
 	p_cmd_enable = net_buf_add(buf, sizeof(*p_cmd_enable));
 	p_cmd_enable->enable = 1;
 
-	err = bt_hci_cmd_send_sync(HCI_VS_OPCODE_CMD_LLPM_MODE_SET, buf, NULL);
+	err = bt_hci_cmd_send_sync(SDC_HCI_OPCODE_CMD_VS_LLPM_MODE_SET, buf, NULL);
 	if (err) {
 		LOG_ERR("Error enabling LLPM (err: %d)", err);
 	} else {
 		LOG_INF("LLPM enabled");
 	}
-#endif
+#endif /* CONFIG_DESKTOP_BLE_USE_LLPM */
 
 	module_set_state(MODULE_STATE_READY);
+}
+
+static void auth_passkey_entry(struct bt_conn *conn)
+{
+	send_passkey_req(true);
+	LOG_INF("Passkey input started");
+}
+
+static void auth_cancel(struct bt_conn *conn)
+{
+	send_passkey_req(false);
+	LOG_INF("Authentication cancelled");
 }
 
 static int ble_state_init(void)
@@ -292,6 +396,15 @@ static int ble_state_init(void)
 		.le_param_updated = le_param_updated,
 	};
 	bt_conn_cb_register(&conn_callbacks);
+
+	if (IS_ENABLED(CONFIG_DESKTOP_BLE_ENABLE_PASSKEY)) {
+		static const struct bt_conn_auth_cb conn_auth_callbacks = {
+			.passkey_entry = auth_passkey_entry,
+			.cancel = auth_cancel,
+		};
+
+		bt_conn_auth_cb_register(&conn_auth_callbacks);
+	}
 
 	return bt_enable(bt_ready);
 }
@@ -325,9 +438,29 @@ static bool event_handler(const struct event_header *eh)
 			/* Connection object is no longer in use. */
 			bt_conn_unref(event->id);
 			break;
+
 		default:
 			/* Ignore. */
 			break;
+		}
+
+		return false;
+	}
+
+	if (IS_ENABLED(CONFIG_DESKTOP_BLE_ENABLE_PASSKEY) &&
+	    is_passkey_input_event(eh)) {
+		const struct passkey_input_event *event =
+			cast_passkey_input_event(eh);
+
+		if (passkey_input) {
+			int err = bt_conn_auth_passkey_entry(active_conn[0],
+							     event->passkey);
+			if (err) {
+				LOG_ERR("Problem entering passkey (err %d)",
+					err);
+			}
+
+			passkey_input = false;
 		}
 
 		return false;
@@ -340,4 +473,7 @@ static bool event_handler(const struct event_header *eh)
 }
 EVENT_LISTENER(MODULE, event_handler);
 EVENT_SUBSCRIBE(MODULE, module_state_event);
+#if CONFIG_DESKTOP_BLE_ENABLE_PASSKEY
+EVENT_SUBSCRIBE(MODULE, passkey_input_event);
+#endif /* CONFIG_DESKTOP_BLE_ENABLE_PASSKEY */
 EVENT_SUBSCRIBE_FINAL(MODULE, ble_peer_event);

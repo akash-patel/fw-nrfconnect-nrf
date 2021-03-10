@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <ztest.h>
@@ -12,7 +12,7 @@
 
 void test_ecdsa_verify(void)
 {
-	u32_t hash_len = ARRAY_SIZE(hash_sha256);
+	uint32_t hash_len = ARRAY_SIZE(hash_sha256);
 
 	/* Success */
 	int retval = bl_secp256r1_validate(hash_sha256, hash_len, pub_concat, sig_concat);
@@ -122,7 +122,7 @@ void test_sha256_string(const uint8_t * input, uint32_t input_len, const uint8_t
 	int rc = 0;
 	uint8_t output[32] = {0};
 	bl_sha256_ctx_t ctx;
-	static u32_t run_count = 0;
+	static uint32_t run_count;
 
 	rc = bl_sha256_init(&ctx);
 	rc = bl_sha256_update(&ctx, input, input_len);
@@ -150,7 +150,6 @@ const uint8_t input2[] = "test vector";
 void test_sha256(void)
 {
 	test_sha256_string(NULL, 0, sha256_empty_string, true);
-	test_sha256_string(const_fw_data, ARRAY_SIZE(const_fw_data), image_fw_hash, true);
 	test_sha256_string(input2, strlen(input2), sha256_test_vector_string, true);
 
 	test_sha256_string(input3, strlen(input3), sha256_test_vector_string, false);
@@ -159,6 +158,8 @@ void test_sha256(void)
 
 	/* Size restrictions. */
 #if CONFIG_FLASH_SIZE > 300
+	test_sha256_string(const_fw_data, ARRAY_SIZE(const_fw_data),
+			   image_fw_hash, true);
 	test_sha256_string(long_input, ARRAY_SIZE(long_input), long_input_hash, true);
 	test_sha256_string(long_input, ARRAY_SIZE(long_input), sha256_test_vector_string, false);
 #endif

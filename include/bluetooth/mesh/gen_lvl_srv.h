@@ -1,12 +1,12 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 /**
  * @file
- * @defgroup bt_mesh_lvl_srv Bluetooth Mesh Generic Level Server model
+ * @defgroup bt_mesh_lvl_srv Bluetooth mesh Generic Level Server model
  * @ingroup bt_mesh_lvl
  * @{
  * @brief API for the Generic Level Server model.
@@ -16,6 +16,7 @@
 #define BT_MESH_GEN_LVL_SRV_H__
 
 #include <bluetooth/mesh/gen_lvl.h>
+#include <bluetooth/mesh/scene_srv.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -32,11 +33,6 @@ struct bt_mesh_lvl_srv;
 #define BT_MESH_LVL_SRV_INIT(_handlers)                                        \
 	{                                                                      \
 		.handlers = _handlers,                                         \
-		.pub = {.update = _bt_mesh_lvl_srv_update_handler,             \
-			.msg = NET_BUF_SIMPLE(BT_MESH_MODEL_BUF_LEN(           \
-				BT_MESH_LVL_OP_STATUS,                         \
-				BT_MESH_LVL_MSG_MAXLEN_STATUS)),               \
-		}                                                              \
 	}
 
 /** @def BT_MESH_MODEL_LVL_SRV
@@ -145,8 +141,15 @@ struct bt_mesh_lvl_srv {
 	struct bt_mesh_model *model;
 	/** Model publication parameters. */
 	struct bt_mesh_model_pub pub;
+	/* Publication buffer */
+	struct net_buf_simple pub_buf;
+	/* Publication data */
+	uint8_t pub_data[BT_MESH_MODEL_BUF_LEN(BT_MESH_LVL_OP_STATUS,
+					       BT_MESH_LVL_MSG_MAXLEN_STATUS)];
 	/** Transaction ID tracking. */
 	struct bt_mesh_tid_ctx tid;
+	/* Scene entry */
+	struct bt_mesh_scene_entry scene;
 };
 
 /** @brief Publish the generic level state.
@@ -157,8 +160,6 @@ struct bt_mesh_lvl_srv {
  * @param[in] status Current status.
  *
  * @retval 0 Successfully published a Generic Level Status message.
- * @retval -ENOTSUP A message context was not provided and publishing is not
- * supported.
  * @retval -EADDRNOTAVAIL A message context was not provided and publishing is
  * not configured.
  * @retval -EAGAIN The device has not been provisioned.
@@ -170,7 +171,6 @@ int bt_mesh_lvl_srv_pub(struct bt_mesh_lvl_srv *srv,
 /** @cond INTERNAL_HIDDEN */
 extern const struct bt_mesh_model_op _bt_mesh_lvl_srv_op[];
 extern const struct bt_mesh_model_cb _bt_mesh_lvl_srv_cb;
-int _bt_mesh_lvl_srv_update_handler(struct bt_mesh_model *model);
 /** @endcond */
 
 #ifdef __cplusplus

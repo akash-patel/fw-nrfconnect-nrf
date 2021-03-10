@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <bluetooth/bluetooth.h>
@@ -24,7 +24,7 @@ static const struct bt_mesh_onoff_srv_handlers onoff_handlers = {
 struct led_ctx {
 	struct bt_mesh_onoff_srv srv;
 	struct k_delayed_work work;
-	u32_t remaining;
+	uint32_t remaining;
 	bool value;
 };
 
@@ -42,7 +42,7 @@ static void led_transition_start(struct led_ctx *led)
 	 * state is "on":
 	 */
 	dk_set_led(led_idx, true);
-	k_delayed_work_submit(&led->work, led->remaining);
+	k_delayed_work_submit(&led->work, K_MSEC(led->remaining));
 	led->remaining = 0;
 }
 
@@ -70,7 +70,8 @@ static void led_set(struct bt_mesh_onoff_srv *srv, struct bt_mesh_msg_ctx *ctx,
 	led->remaining = set->transition->time;
 
 	if (set->transition->delay > 0) {
-		k_delayed_work_submit(&led->work, set->transition->delay);
+		k_delayed_work_submit(&led->work,
+				      K_MSEC(set->transition->delay));
 	} else if (set->transition->time > 0) {
 		led_transition_start(led);
 	} else {
@@ -109,19 +110,6 @@ static void led_work(struct k_work *work)
 	}
 }
 
-/** Configuration server definition */
-static struct bt_mesh_cfg_srv cfg_srv = {
-	.relay = IS_ENABLED(CONFIG_BT_MESH_RELAY),
-	.beacon = BT_MESH_BEACON_ENABLED,
-	.frnd = IS_ENABLED(CONFIG_BT_MESH_FRIEND),
-	.gatt_proxy = IS_ENABLED(CONFIG_BT_MESH_GATT_PROXY),
-	.default_ttl = BT_MESH_TTL_DEFAULT,
-
-	/* 3 transmissions with 20ms interval */
-	.net_transmit = BT_MESH_TRANSMIT(2, 20),
-	.relay_retransmit = BT_MESH_TRANSMIT(2, 20),
-};
-
 /* Set up a repeating delayed work to blink the DK's LEDs when attention is
  * requested.
  */
@@ -130,7 +118,7 @@ static struct k_delayed_work attention_blink_work;
 static void attention_blink(struct k_work *work)
 {
 	static int idx;
-	const u8_t pattern[] = {
+	const uint8_t pattern[] = {
 		BIT(0) | BIT(1),
 		BIT(1) | BIT(2),
 		BIT(2) | BIT(3),
@@ -165,7 +153,7 @@ BT_MESH_HEALTH_PUB_DEFINE(health_pub, 0);
 static struct bt_mesh_elem elements[] = {
 	BT_MESH_ELEM(
 		1, BT_MESH_MODEL_LIST(
-			BT_MESH_MODEL_CFG_SRV(&cfg_srv),
+			BT_MESH_MODEL_CFG_SRV,
 			BT_MESH_MODEL_HEALTH_SRV(&health_srv, &health_pub),
 			BT_MESH_MODEL_ONOFF_SRV(&led_ctx[0].srv)),
 		BT_MESH_MODEL_NONE),

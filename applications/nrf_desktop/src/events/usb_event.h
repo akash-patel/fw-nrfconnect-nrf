@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #ifndef _USB_EVENT_H_
@@ -41,10 +41,17 @@ struct usb_state_event {
 	struct event_header header; /**< Event header. */
 
 	enum usb_state state; /**< State of the USB module. */
-	const void *id;       /**< Module id. */
 };
 EVENT_TYPE_DECLARE(usb_state_event);
 
+/** @brief USB HID event. */
+struct usb_hid_event {
+	struct event_header header; /**< Event header. */
+
+	const void *id;       /**< USB HID device id. */
+	bool enabled;
+};
+EVENT_TYPE_DECLARE(usb_hid_event);
 
 #ifdef __cplusplus
 }

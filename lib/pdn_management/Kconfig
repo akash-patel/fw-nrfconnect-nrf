@@ -1,9 +1,9 @@
 #
 # Copyright (c) 2019 Nordic Semiconductor
 #
-# SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
-menuconfig PDN_MANAGEMENT
+config PDN_MANAGEMENT
 	bool "PDN Management for nRF9160"
-	depends on BSD_LIBRARY
+	depends on NRF_MODEM_LIB

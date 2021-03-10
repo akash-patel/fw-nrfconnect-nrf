@@ -1,20 +1,21 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <zephyr.h>
 
+#include <bluetooth/bluetooth.h>
 #include <bluetooth/gatt.h>
 #include <bluetooth/uuid.h>
 #include <bluetooth/gatt_dm.h>
 #include <bluetooth/scan.h>
 
 #include <dk_buttons_and_leds.h>
-#include <misc/byteorder.h>
+#include <sys/byteorder.h>
 
-#include <nrf_cloud.h>
+#include <net/nrf_cloud.h>
 #include "aggregator.h"
 
 /* Thinghy advertisement UUID */
@@ -34,23 +35,23 @@
 
 extern void alarm(void);
 
-static u8_t on_received(struct bt_conn *conn,
+static uint8_t on_received(struct bt_conn *conn,
 			struct bt_gatt_subscribe_params *params,
-			const void *data, u16_t length)
+			const void *data, uint16_t length)
 {
 	if (length > 0) {
-		printk("Orientation: %x\n", ((u8_t *)data)[0]);
+		printk("Orientation: %x\n", ((uint8_t *)data)[0]);
 		struct sensor_data in_data;
 
 		in_data.type = THINGY_ORIENTATION;
 		in_data.length = 1;
-		in_data.data[0] = ((u8_t *)data)[0];
+		in_data.data[0] = ((uint8_t *)data)[0];
 
 		if (aggregator_put(in_data) != 0) {
 			printk("Was not able to insert Thingy orientation data into aggregator.\n");
 		}
 		/* If the thingy is upside down, trigger an alarm. */
-		if (((u8_t *)data)[0] == 3) {
+		if (((uint8_t *)data)[0] == 3) {
 			alarm();
 		}
 
@@ -70,8 +71,8 @@ static void discovery_completed(struct bt_gatt_dm *disc, void *ctx)
 		.value = BT_GATT_CCC_NOTIFY,
 	};
 
-	const struct bt_gatt_attr *chrc;
-	const struct bt_gatt_attr *desc;
+	const struct bt_gatt_dm_attr *chrc;
+	const struct bt_gatt_dm_attr *desc;
 
 	chrc = bt_gatt_dm_char_by_uuid(disc, BT_UUID_TOC);
 	if (!chrc) {
@@ -123,7 +124,7 @@ static struct bt_gatt_dm_cb discovery_cb = {
 	.error_found = discovery_error_found,
 };
 
-static void connected(struct bt_conn *conn, u8_t conn_err)
+static void connected(struct bt_conn *conn, uint8_t conn_err)
 {
 	int err;
 	char addr[BT_ADDR_LE_STR_LEN];
@@ -153,7 +154,7 @@ void scan_filter_match(struct bt_scan_device_info *device_info,
 {
 	char addr[BT_ADDR_LE_STR_LEN];
 
-	bt_addr_le_to_str(device_info->addr, addr, sizeof(addr));
+	bt_addr_le_to_str(device_info->recv_info->addr, addr, sizeof(addr));
 
 	printk("Device found: %s\n", addr);
 }
@@ -170,8 +171,8 @@ static void scan_start(void)
 	int err;
 
 	struct bt_le_scan_param scan_param = {
-		.type = BT_HCI_LE_SCAN_ACTIVE,
-		.filter_dup = BT_HCI_LE_SCAN_FILTER_DUP_ENABLE,
+		.type = BT_LE_SCAN_TYPE_ACTIVE,
+		.options = BT_LE_SCAN_OPT_FILTER_DUPLICATE,
 		.interval = 0x0010,
 		.window = 0x0010,
 	};

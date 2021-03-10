@@ -1,11 +1,12 @@
 #
 # Copyright (c) 2019 Nordic Semiconductor
 #
-# SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
 cmake_minimum_required(VERSION 3.13.1)
-include($ENV{ZEPHYR_BASE}/cmake/app/boilerplate.cmake NO_POLICY_SCOPE)
+
+find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(example_test)
 
 # generate runner for the test
@@ -26,6 +27,7 @@ target_include_directories(app PRIVATE ./src/uut)
 # add test file
 target_sources(app PRIVATE src/example_test.c)
 target_include_directories(app PRIVATE .)
+target_include_directories(app PRIVATE src/foo)
 
 # Preinclude file to the module under test to redefine IS_ENABLED() macro
 # which is used in the module.

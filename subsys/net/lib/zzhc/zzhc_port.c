@@ -1,17 +1,16 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <logging/log.h>
 LOG_MODULE_REGISTER(zzhc_port, CONFIG_ZZHC_LOG_LEVEL);
 
 #include <zephyr.h>
-#include <base64.h>
-#include <secure_services.h>
-#include <json.h>
-#include <at_cmd_parser/at_cmd_parser.h>
+#include <sys/base64.h>
+#include <data/json.h>
+#include <modem/at_cmd_parser.h>
 #include "zzhc_internal.h"
 
 #define AT_PARAMS_MAX     11        /** Max. # of AT-params to parse */
@@ -39,13 +38,6 @@ static const struct json_obj_descr rsp_desc[] = {
 	JSON_OBJ_DESCR_PRIM_NAMED(struct rsp_obj, "resultDesc", res_desc,
 		JSON_TOK_STRING),
 };
-
-int zzhc_read_chip_rev(u32_t *i)
-{
-	u32_t ficr_addr = NRF_FICR_S_BASE + FICR_REV_OFFSET;
-
-	return spm_request_read(i, ficr_addr, sizeof(u32_t));
-}
 
 int zzhc_load_iccid(char *iccid_buf, int buf_len)
 {
@@ -167,7 +159,7 @@ bool zzhc_check_http_payload(struct zzhc *ctx)
 int zzhc_get_at_param_short(struct zzhc *ctx, char *data, int idx)
 {
 	int rc;
-	u16_t evt;
+	uint16_t evt;
 	struct at_param_list *at_list = (struct at_param_list *)ctx->at_list;
 
 	rc = at_parser_max_params_from_str(data, NULL, at_list, AT_PARAMS_MAX);
@@ -190,4 +182,3 @@ int zzhc_get_at_param_short(struct zzhc *ctx, char *data, int idx)
 
 	return evt;
 }
-

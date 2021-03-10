@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 /**
@@ -33,16 +33,6 @@ struct bt_mesh_loc_srv;
 #define BT_MESH_LOC_SRV_INIT(_handlers)                                        \
 	{                                                                      \
 		.handlers = _handlers,                                         \
-		.pub = {                                                       \
-			.update = _bt_mesh_loc_srv_update_handler,             \
-			.msg = NET_BUF_SIMPLE(MAX(                             \
-				BT_MESH_MODEL_BUF_LEN(                         \
-					BT_MESH_LOC_OP_LOCAL_STATUS,           \
-					BT_MESH_LOC_MSG_LEN_LOCAL_STATUS),     \
-				BT_MESH_MODEL_BUF_LEN(                         \
-					BT_MESH_LOC_OP_GLOBAL_STATUS,          \
-					BT_MESH_LOC_MSG_LEN_GLOBAL_STATUS)))   \
-		},                                                             \
 	}
 
 /** @def BT_MESH_MODEL_LOC_SRV
@@ -56,7 +46,11 @@ struct bt_mesh_loc_srv;
 			 _bt_mesh_loc_srv_op, &(_srv)->pub,                    \
 			 BT_MESH_MODEL_USER_DATA(struct bt_mesh_loc_srv,       \
 						 _srv),                        \
-			 &_bt_mesh_loc_srv_cb)
+			 &_bt_mesh_loc_srv_cb),                                \
+		BT_MESH_MODEL(BT_MESH_MODEL_ID_GEN_LOCATION_SETUPSRV,          \
+			      _bt_mesh_loc_setup_srv_op, NULL,                 \
+			      BT_MESH_MODEL_USER_DATA(struct bt_mesh_loc_srv,  \
+						      _srv))
 
 /** Location Server handler functions. */
 struct bt_mesh_loc_srv_handlers {
@@ -128,9 +122,17 @@ struct bt_mesh_loc_srv {
 	struct bt_mesh_model *model;
 	/** Publish parameters for this model instance. */
 	struct bt_mesh_model_pub pub;
+	/* Publication buffer */
+	struct net_buf_simple pub_buf;
+	/* Publication data */
+	uint8_t pub_data[MAX(
+		BT_MESH_MODEL_BUF_LEN(BT_MESH_LOC_OP_LOCAL_STATUS,
+				      BT_MESH_LOC_MSG_LEN_LOCAL_STATUS),
+		BT_MESH_MODEL_BUF_LEN(BT_MESH_LOC_OP_GLOBAL_STATUS,
+				      BT_MESH_LOC_MSG_LEN_GLOBAL_STATUS))];
 
 	/** Current opcode being published. */
-	u16_t pub_op;
+	uint16_t pub_op;
 	/** Pointer to a handler structure. */
 	const struct bt_mesh_loc_srv_handlers *const handlers;
 };
@@ -140,8 +142,8 @@ struct bt_mesh_loc_srv {
  * Asynchronously publishes a Global Location status message with the
  * configured publish parameters.
  *
- * @note This API is only used publishing unprompted status messages. Response
- * messages for get and set are handled internally.
+ * @note This API is only used for publishing unprompted status messages.
+ * Response messages for get and set messages are handled internally.
  *
  * @note The server will only publish one state at the time. Calling this
  * function will terminate any publishing of the Local Location state.
@@ -152,13 +154,11 @@ struct bt_mesh_loc_srv {
  * @param[in] global Current global location.
  *
  * @retval 0 Successfully published a Global Location status message.
- * @retval -ENOTSUP A message context was not provided and publishing is not
- * supported.
  * @retval -EADDRNOTAVAIL A message context was not provided and publishing is
  * not configured.
  * @retval -EAGAIN The device has not been provisioned.
  */
-s32_t bt_mesh_loc_srv_global_pub(struct bt_mesh_loc_srv *srv,
+int32_t bt_mesh_loc_srv_global_pub(struct bt_mesh_loc_srv *srv,
 				 struct bt_mesh_msg_ctx *ctx,
 				 const struct bt_mesh_loc_global *global);
 
@@ -167,8 +167,8 @@ s32_t bt_mesh_loc_srv_global_pub(struct bt_mesh_loc_srv *srv,
  * Asynchronously publishes a Local Location status message with the configured
  * publish parameters.
  *
- * @note This API is only used publishing unprompted status messages. Response
- * messages for get and set are handled internally.
+ * @note This API is only used for publishing unprompted status messages.
+ * Response messages for get and set messages are handled internally.
  *
  * @note The server will only publish one state at the time. Calling this
  * function will terminate any publishing of the Global Location state.
@@ -179,13 +179,11 @@ s32_t bt_mesh_loc_srv_global_pub(struct bt_mesh_loc_srv *srv,
  * @param[in] local Current local location.
  *
  * @retval 0 Successfully published a Local Location status message.
- * @retval -ENOTSUP A message context was not provided and publishing is not
- * supported.
  * @retval -EADDRNOTAVAIL A message context was not provided and publishing is
  * not configured.
  * @retval -EAGAIN The device has not been provisioned.
  */
-s32_t bt_mesh_loc_srv_local_pub(struct bt_mesh_loc_srv *srv,
+int32_t bt_mesh_loc_srv_local_pub(struct bt_mesh_loc_srv *srv,
 				struct bt_mesh_msg_ctx *ctx,
 				const struct bt_mesh_loc_local *local);
 
@@ -193,7 +191,6 @@ s32_t bt_mesh_loc_srv_local_pub(struct bt_mesh_loc_srv *srv,
 extern const struct bt_mesh_model_op _bt_mesh_loc_srv_op[];
 extern const struct bt_mesh_model_op _bt_mesh_loc_setup_srv_op[];
 extern const struct bt_mesh_model_cb _bt_mesh_loc_srv_cb;
-int _bt_mesh_loc_srv_update_handler(struct bt_mesh_model *model);
 /** @endcond */
 
 #ifdef __cplusplus

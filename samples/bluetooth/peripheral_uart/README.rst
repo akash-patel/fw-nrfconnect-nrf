@@ -3,6 +3,10 @@
 Bluetooth: Peripheral UART
 ##########################
 
+.. contents::
+   :local:
+   :depth: 2
+
 The Peripheral UART sample demonstrates how to use the :ref:`nus_service_readme`.
 It uses the NUS service to send data back and forth between a UART connection and a Bluetooth LE connection, emulating a serial port over Bluetooth LE.
 
@@ -15,18 +19,33 @@ On Nordic Semiconductor's development kits, the UART 1 peripheral is typically g
 
 Any data sent from the Bluetooth LE unit is sent out of the UART 1 peripheral's TX pin.
 
+
+.. _peripheral_uart_debug:
+
+Debugging
+*********
+
+In this sample, the UART console is used to send and read data over the NUS service.
+Debug messages are not displayed in this UART console.
+Instead, they are printed by the RTT logger.
+
+If you want to view the debug messages, follow the procedure in :ref:`testing_rtt_connect`.
+
 Requirements
 ************
 
-* One of the following development boards:
+The sample supports the following development kits:
 
-  * |nRF5340DK|
-  * |nRF52840DK|
-  * |nRF52DK|
+.. table-from-rows:: /includes/sample_board_rows.txt
+   :header: heading
+   :rows: nrf5340dk_nrf5340_cpuapp_and_cpuappns, nrf52840dk_nrf52840, nrf52840dk_nrf52811, nrf52833dk_nrf52833, nrf52833dk_nrf52820, nrf52833dk_nrf52820, nrf52dk_nrf52832, nrf52dk_nrf52810
 
-* A phone or tablet running a compatible application. The `Testing`_ instructions refer to nRF Connect for Mobile, but similar applications (for example, nRF Toolbox) can be used as well.
 
-  You can also test the application with the :ref:`central_uart` sample. See the documentation for that sample for detailed instructions.
+The sample also requires a phone or tablet running a compatible application.
+The `Testing`_ instructions refer to nRF Connect for Mobile, but similar applications (for example, nRF Toolbox) can be used as well.
+
+You can also test the application with the :ref:`central_uart` sample.
+See the documentation for that sample for detailed instructions.
 
 User interface
 **************
@@ -45,25 +64,36 @@ Button 2:
 
 Building and running
 ********************
+
 .. |sample path| replace:: :file:`samples/bluetooth/peripheral_uart`
 
 .. include:: /includes/build_and_run.txt
+
+Minimal build
+=============
+
+You can build the sample with a minimum configuration as a demonstration of how to reduce code size and RAM usage.
+
+.. code-block:: console
+
+   west build samples/bluetooth/peripheral_uart -- -DCONF_FILE='prj_minimal.conf'
 
 .. _peripheral_uart_testing:
 
 Testing
 =======
 
-After programming the sample to your board, test it by performing the following steps:
+After programming the sample to your development kit, test it by performing the following steps:
 
-1. Connect the board to the computer using a USB cable. The board is assigned a COM port (Windows) or ttyACM device (Linux), which is visible in the Device Manager.
+1. Connect the kit to the computer using a USB cable. The kit is assigned a COM port (Windows) or ttyACM device (Linux), which is visible in the Device Manager.
 #. |connect_terminal|
-#. Reset the board.
-#. Observe that LED 1 is blinking and that the device is advertising with the device name that is configured in :option:`CONFIG_BT_DEVICE_NAME <zephyr:CONFIG_BT_DEVICE_NAME>`.
+#. Optionally, connect the RTT console to display debug messages. See :ref:`peripheral_uart_debug`.
+#. Reset the kit.
+#. Observe that LED 1 is blinking and that the device is advertising with the device name that is configured in :option:`CONFIG_BT_DEVICE_NAME`.
 #. Observe that the text "Starting Nordic UART service example" is printed on the COM listener running on the computer.
 #. Connect to the device using nRF Connect for Mobile.
    Observe that LED 2 is on.
-#. Optionally, pair/bond with the device with MITM protection.
+#. Optionally, pair/bond with the device with MITM protection. This requires :ref:`RTT connection <testing_rtt_connect>`.
    To confirm pairing/bonding, press Button 1 on the device and accept the passkey value on the smartphone.
 #. In the app, observe that the services are shown in the connected device.
 #. Select the UART RX characteristic value in nRF Connect.
@@ -88,7 +118,7 @@ In addition, it uses the following Zephyr libraries:
 
 * ``include/zephyr/types.h``
 * ``boards/arm/nrf*/board.h``
-* :ref:`zephyr:kernel`:
+* :ref:`zephyr:kernel_api`:
 
   * ``include/kernel.h``
 

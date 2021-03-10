@@ -1,7 +1,7 @@
 #
 # Copyright (c) 2018 Nordic Semiconductor
 #
-# SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
 config NCS_SAMPLES_DEFAULTS
@@ -10,28 +10,28 @@ config NCS_SAMPLES_DEFAULTS
 	imply LOG
 	imply LOG_MINIMAL
 	imply ASSERT
-	imply HW_STACK_PROTECTION
+	imply ASSERT_NO_COND_INFO
+	imply ASSERT_NO_MSG_INFO
+	imply HW_STACK_PROTECTION if ARCH_HAS_STACK_PROTECTION
 	help
 	  Use the default configuration for NCS samples.
 
+config NCS_SAMPLE_EMPTY_APP_CORE_CHILD_IMAGE
+	bool "Enable empty_app_core as a child image"
+	default n
+	depends on SOC_NRF5340_CPUNET
+	select PARTITION_MANAGER_ENABLED
+	help
+	  Add the empty_app_core as a child image for the given sample.
+	  Used by samples that only require SOC_NRF5340_CPUNET.
 
 if LOG
 
-# LOG_DEFAULT_LEVEL is declared in Zephyr and also here for a second time,
-# for set the valid default size value
-config LOG_DEFAULT_LEVEL
-	int "Default log level"
-	default 1 if NCS_SAMPLES_DEFAULTS
-	range 0 4
-	help
-	  Sets log level for modules which don't specify it explicitly. When
-	  set to 0 it means log will not be activated for those modules.
-	  Levels are:
+# LOG_DEFAULT_LEVEL is declared in Zephyr,
+# we declare it here for a second time, to set a different default.
+# Omit the `prompt` to prevent it from appearing twice in two diffent places.
 
-	  - 0 OFF, do not write by default
-	  - 1 ERROR, default to only write LOG_LEVEL_ERR
-	  - 2 WARNING, default to write LOG_LEVEL_WRN
-	  - 3 INFO, default to write LOG_LEVEL_INFO
-	  - 4 DEBUG, default to write LOG_LEVEL_DBG
+config LOG_DEFAULT_LEVEL
+	default 1 if NCS_SAMPLES_DEFAULTS
 
 endif # LOG

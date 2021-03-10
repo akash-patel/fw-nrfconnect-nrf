@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: Apache-2.0
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #ifndef FOTA_STORAGE_H__
@@ -19,7 +19,7 @@ enum counter_type {
 };
 
 int fota_update_counter_read(struct update_counter *update_counter);
-int fota_update_counter_update(enum counter_type type, u32_t new_value);
+int fota_update_counter_update(enum counter_type type, uint32_t new_value);
 int fota_settings_init(void);
 
 #endif	/* FOTA_STORAGE_H__ */

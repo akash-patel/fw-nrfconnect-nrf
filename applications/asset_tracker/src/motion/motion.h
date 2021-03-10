@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #ifndef MOTION_H_
@@ -32,6 +32,13 @@ typedef enum {
 	MOTION_ORIENTATION_ON_SIDE      /**< System is placed on its side. */
 } motion_orientation_state_t;
 
+/**@brief Activity states. */
+typedef enum {
+	MOTION_ACTIVITY_NOT_KNOWN,	/**< Initial state. */
+	MOTION_ACTIVITY_ACTIVE,		/**< Activity threshold exceeded. */
+	MOTION_ACTIVITY_INACTIVE,	/**< Inactivity threshold exceeded. */
+} motion_activity_state_t;
+
 typedef struct {
 	double x;			/**< X-axis acceleration [m/s^2]. */
 	double y;			/**< y-axis acceleration [m/s^2]. */
@@ -41,7 +48,8 @@ typedef struct {
 typedef struct {
 	motion_orientation_state_t orientation;
 	motion_acceleration_data_t acceleration;
-	/* TODO add timestamp */
+	/** Data sampling uptime. */
+	int64_t ts;
 } motion_data_t;
 
 typedef void (*motion_handler_t)(motion_data_t  motion_data);
@@ -51,7 +59,8 @@ typedef void (*motion_handler_t)(motion_data_t  motion_data);
  *
  * @return 0 if the operation was successful, otherwise a (negative) error code.
  */
-int motion_init_and_start(motion_handler_t motion_handler);
+int motion_init_and_start(struct k_work_q *work_q,
+			  motion_handler_t motion_handler);
 
 /**
  * @brief Manually trigger the motion module to fetch data.

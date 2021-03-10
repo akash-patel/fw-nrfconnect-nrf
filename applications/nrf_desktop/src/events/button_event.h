@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #ifndef _BUTTON_EVENT_H_
@@ -22,7 +22,7 @@ extern "C" {
 struct button_event {
 	struct event_header header;
 
-	u16_t key_id;
+	uint16_t key_id;
 	bool  pressed;
 };
 

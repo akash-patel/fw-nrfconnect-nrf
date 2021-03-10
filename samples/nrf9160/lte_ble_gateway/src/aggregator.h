@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #ifndef _AGGREGATOR_H_
@@ -18,10 +18,10 @@
  * data.
  */
 #include <zephyr/types.h>
-#include <gps.h>
+#include <drivers/gps.h>
 
-/* In this sample the GPS data is 81 byte + a data sequence tag,
- * so 85 byte is used.
+/* In this sample the GPS data is 83 byte + a data sequence tag,
+ * so 87 byte is used.
  */
 #define ENTRY_MAX_SIZE (GPS_NMEA_SENTENCE_MAX_LENGTH + 4)
 #define FIFO_MAX_ELEMENT_COUNT 12
@@ -29,9 +29,9 @@
 enum sensor_data_type { THINGY_ORIENTATION, GPS_POSITION };
 
 struct sensor_data {
-	u8_t length;
+	uint8_t length;
 	enum sensor_data_type type;
-	u8_t data[ENTRY_MAX_SIZE];
+	uint8_t data[ENTRY_MAX_SIZE];
 };
 
 int aggregator_init(void);

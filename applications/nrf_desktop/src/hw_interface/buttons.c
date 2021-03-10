@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2018-2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <zephyr/types.h>
@@ -9,8 +9,8 @@
 #include <kernel.h>
 #include <soc.h>
 #include <device.h>
-#include <gpio.h>
-#include <misc/util.h>
+#include <drivers/gpio.h>
+#include <sys/util.h>
 
 #include "key_id.h"
 #include "gpio_pins.h"
@@ -27,6 +27,7 @@
 LOG_MODULE_REGISTER(MODULE, CONFIG_DESKTOP_BUTTONS_LOG_LEVEL);
 
 #define SCAN_INTERVAL CONFIG_DESKTOP_BUTTONS_SCAN_INTERVAL
+#define DEBOUNCE_INTERVAL CONFIG_DESKTOP_BUTTONS_DEBOUNCE_INTERVAL
 
 /* For directly connected GPIO, scan rows once. */
 #define COLUMNS MAX(ARRAY_SIZE(col), 1)
@@ -38,7 +39,7 @@ enum state {
 	STATE_SUSPENDING
 };
 
-static struct device *gpio_devs[ARRAY_SIZE(port_map)];
+static const struct device *gpio_devs[ARRAY_SIZE(port_map)];
 static struct gpio_callback gpio_cb[ARRAY_SIZE(port_map)];
 static struct k_delayed_work matrix_scan;
 static struct k_delayed_work button_pressed;
@@ -48,10 +49,10 @@ static enum state state;
 static void scan_fn(struct k_work *work);
 
 
-static int set_cols(u32_t mask)
+static int set_cols(uint32_t mask)
 {
 	for (size_t i = 0; i < ARRAY_SIZE(col); i++) {
-		u32_t val = (mask & BIT(i)) ? (1) : (0);
+		uint32_t val = (mask & BIT(i)) ? (1) : (0);
 		int err;
 
 		if (val || !mask) {
@@ -60,14 +61,14 @@ static int set_cols(u32_t mask)
 			}
 
 			err = gpio_pin_configure(gpio_devs[col[i].port],
-						 col[i].pin, GPIO_DIR_OUT);
+						 col[i].pin, GPIO_OUTPUT);
 			if (!err) {
-				err = gpio_pin_write(gpio_devs[col[i].port],
-						     col[i].pin, val);
+				err = gpio_pin_set_raw(gpio_devs[col[i].port],
+						       col[i].pin, val);
 			}
 		} else {
 			err = gpio_pin_configure(gpio_devs[col[i].port],
-						 col[i].pin, GPIO_DIR_IN);
+						 col[i].pin, GPIO_INPUT);
 		}
 
 		if (err) {
@@ -79,12 +80,12 @@ static int set_cols(u32_t mask)
 	return 0;
 }
 
-static int get_rows(u32_t *mask)
+static int get_rows(uint32_t *mask)
 {
 	for (size_t i = 0; i < ARRAY_SIZE(row); i++) {
-		u32_t val;
+		int val = gpio_pin_get_raw(gpio_devs[row[i].port], row[i].pin);
 
-		if (gpio_pin_read(gpio_devs[row[i].port], row[i].pin, &val)) {
+		if (val < 0) {
 			LOG_ERR("Cannot get pin");
 			return -EFAULT;
 		}
@@ -99,15 +100,11 @@ static int get_rows(u32_t *mask)
 	return 0;
 }
 
-static int set_trig_mode(int trig_mode)
+static int set_trig_mode(void)
 {
-	__ASSERT_NO_MSG((trig_mode == GPIO_INT_EDGE) ||
-			(trig_mode == GPIO_INT_LEVEL));
-
-	int flags = (IS_ENABLED(CONFIG_DESKTOP_BUTTONS_POLARITY_INVERSED) ?
-		(GPIO_PUD_PULL_UP | GPIO_INT_ACTIVE_LOW) :
-		(GPIO_PUD_PULL_DOWN | GPIO_INT_ACTIVE_HIGH));
-	flags |= (GPIO_DIR_IN | GPIO_INT | trig_mode);
+	gpio_flags_t flags = (IS_ENABLED(CONFIG_DESKTOP_BUTTONS_POLARITY_INVERSED) ?
+			      (GPIO_PULL_UP) : (GPIO_PULL_DOWN));
+	flags |= GPIO_INPUT;
 
 	int err = 0;
 
@@ -139,11 +136,20 @@ static int callback_ctrl(bool enable)
 
 	for (size_t i = 0; (i < ARRAY_SIZE(row)) && !err; i++) {
 		if (enable) {
-			err = gpio_pin_enable_callback(gpio_devs[row[i].port],
-						       row[i].pin);
+			/* Level interrupt is needed to leave deep sleep mode.
+			 * Edge interrupt gives only 7 channels. It is not
+			 * suitable for larger matrix/number of GPIO buttons.
+			 */
+			gpio_flags_t flag_irq = (IS_ENABLED(CONFIG_DESKTOP_BUTTONS_POLARITY_INVERSED) ?
+						(GPIO_INT_LEVEL_LOW) : (GPIO_INT_LEVEL_HIGH));
+
+			err = gpio_pin_interrupt_configure(gpio_devs[row[i].port],
+							   row[i].pin,
+							   flag_irq);
 		} else {
-			err = gpio_pin_disable_callback(gpio_devs[row[i].port],
-							row[i].pin);
+			err = gpio_pin_interrupt_configure(gpio_devs[row[i].port],
+							   row[i].pin,
+							   GPIO_INT_DISABLE);
 		}
 	}
 	if (!enable) {
@@ -216,7 +222,7 @@ static void scan_fn(struct k_work *work)
 			(state == STATE_SUSPENDING));
 
 	/* Get current state */
-	u32_t raw_state[COLUMNS];
+	uint32_t raw_state[COLUMNS];
 	memset(raw_state, 0, sizeof(raw_state));
 
 	for (size_t i = 0; i < COLUMNS; i++) {
@@ -238,21 +244,21 @@ static void scan_fn(struct k_work *work)
 		goto error;
 	}
 
-	static u32_t settled_state[COLUMNS];
+	static uint32_t settled_state[COLUMNS];
 
 	/* Prevent bouncing */
-	static u32_t prev_state[COLUMNS];
+	static uint32_t prev_state[COLUMNS];
 	for (size_t i = 0; i < COLUMNS; i++) {
-		u32_t bounce_mask = prev_state[i] ^ raw_state[i];
+		uint32_t bounce_mask = prev_state[i] ^ raw_state[i];
 		prev_state[i] = raw_state[i];
 		raw_state[i] &= ~bounce_mask;
 		raw_state[i] |= settled_state[i] & bounce_mask;
 	}
 
 	/* Prevent ghosting */
-	u32_t cur_state[COLUMNS];
+	uint32_t cur_state[COLUMNS];
 	for (size_t i = 0; i < COLUMNS; i++) {
-		u32_t blocking_mask = 0;
+		uint32_t blocking_mask = 0;
 		for (size_t j = 0; j < COLUMNS; j++) {
 			if (i == j) {
 				continue;
@@ -300,7 +306,7 @@ static void scan_fn(struct k_work *work)
 
 	if (any_pressed) {
 		/* Schedule next scan */
-		k_delayed_work_submit(&matrix_scan, SCAN_INTERVAL);
+		k_delayed_work_submit(&matrix_scan, K_MSEC(SCAN_INTERVAL));
 	} else {
 		/* If no button is pressed module can switch to callbacks */
 
@@ -345,9 +351,9 @@ error:
 	module_set_state(MODULE_STATE_ERROR);
 }
 
-static void button_pressed_isr(struct device *gpio_dev,
+static void button_pressed_isr(const struct device *gpio_dev,
 			       struct gpio_callback *cb,
-			       u32_t pins)
+			       uint32_t pins)
 {
 	int err = 0;
 
@@ -357,18 +363,24 @@ static void button_pressed_isr(struct device *gpio_dev,
 		err = -EFAULT;
 	}
 
+	/* This is a workaround. Zephyr will set any pin triggering interrupt
+	 * at the moment. Not only our pins.
+	 */
+	pins = pins & cb->pin_mask;
+
 	/* Disable all interrupts synchronously requires holding a spinlock.
 	 * The problem is that GPIO callback disable code takes time. If lock
 	 * is kept during this operation BLE stack can fail in some cases.
 	 * Instead we disable callbacks associated with the pins. This is to
-	 * make sure CPU is avialable for threads. The remaining callbacks are
+	 * make sure CPU is available for threads. The remaining callbacks are
 	 * disabled in the workqueue thread context. Work code also cancels
-	 * itselfs to prevent double execution when interrupt for another
+	 * itself to prevent double execution when interrupt for another
 	 * pin was triggered in-between.
 	 */
-	for (u32_t pin = 0; (pins != 0) && !err; pins >>= 1, pin++) {
+	for (uint32_t pin = 0; (pins != 0) && !err; pins >>= 1, pin++) {
 		if ((pins & 1) != 0) {
-			err = gpio_pin_disable_callback(gpio_dev, pin);
+			err = gpio_pin_interrupt_configure(gpio_dev, pin,
+							   GPIO_INT_DISABLE);
 		}
 	}
 
@@ -376,7 +388,7 @@ static void button_pressed_isr(struct device *gpio_dev,
 		LOG_ERR("Cannot disable callbacks");
 		module_set_state(MODULE_STATE_ERROR);
 	} else {
-		k_delayed_work_submit(&button_pressed, 0);
+		k_delayed_work_submit(&button_pressed, K_NO_WAIT);
 	}
 }
 
@@ -398,8 +410,7 @@ static void button_pressed_fn(struct k_work *work)
 
 	case STATE_ACTIVE:
 		state = STATE_SCANNING;
-		k_delayed_work_submit(&matrix_scan,
-				      CONFIG_DESKTOP_BUTTONS_DEBOUNCE_INTERVAL);
+		k_delayed_work_submit(&matrix_scan, K_MSEC(DEBOUNCE_INTERVAL));
 		break;
 
 	case STATE_SCANNING:
@@ -431,7 +442,7 @@ static void init_fn(void)
 		__ASSERT_NO_MSG(gpio_devs[col[i].port] != NULL);
 
 		int err = gpio_pin_configure(gpio_devs[col[i].port],
-					     col[i].pin, GPIO_DIR_IN);
+					     col[i].pin, GPIO_INPUT);
 
 		if (err) {
 			LOG_ERR("Cannot configure cols");
@@ -439,23 +450,20 @@ static void init_fn(void)
 		}
 	}
 
-	/* Level interrupt is needed to leave deep sleep mode.
-	 * Edge interrupt gives only 7 channels so is not suitable
-	 * for larger matrix or number of GPIO buttons.
-	 */
-	int err = set_trig_mode(GPIO_INT_LEVEL);
+	int err = set_trig_mode();
 	if (err) {
 		LOG_ERR("Cannot set interrupt mode");
 		goto error;
 	}
 
-	u32_t pin_mask[ARRAY_SIZE(port_map)] = {0};
+	uint32_t pin_mask[ARRAY_SIZE(port_map)] = {0};
 	for (size_t i = 0; i < ARRAY_SIZE(row); i++) {
 		/* Module starts in scanning mode and will switch to
 		 * callback mode if no button is pressed.
 		 */
-		err = gpio_pin_disable_callback(gpio_devs[row[i].port],
-						row[i].pin);
+		err = gpio_pin_interrupt_configure(gpio_devs[row[i].port],
+						   row[i].pin,
+						   GPIO_INT_DISABLE);
 		if (err) {
 			LOG_ERR("Cannot configure rows");
 			goto error;

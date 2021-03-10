@@ -1,7 +1,7 @@
 #
 # Copyright (c) 2019 Nordic Semiconductor
 #
-# SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
 menu "Self-Registration (Zi ZHu Ce)"
@@ -9,7 +9,7 @@ menu "Self-Registration (Zi ZHu Ce)"
 config ZZHC
 	bool "Self-Registration Daemon"
 	depends on TRUSTED_EXECUTION_NONSECURE
-	select BSD_LIBRARY
+	select NRF_MODEM_LIB
 	select SETTINGS
 	select AT_CMD
 	select AT_CMD_PARSER

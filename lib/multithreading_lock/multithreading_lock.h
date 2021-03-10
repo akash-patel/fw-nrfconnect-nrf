@@ -1,13 +1,13 @@
 /*
- * Copyright (c) 2019 Nordic Semiconductor ASA
+ * Copyright (c) 2019 - 2020 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 /**
  * @file multithreading_lock.h
  *
- * @brief APIs for ensuring BLE controller threadsafe operation.
+ * @brief APIs for ensuring MPSL and BLE controller threadsafe operation.
  */
 
 #ifndef MULTITHREADING_LOCK_H__
@@ -40,13 +40,13 @@ extern "C" {
  * This API call will be blocked for the time specified by @p timeout and then
  * return error code.
  *
- * @param[in] timeout     Timeout value (in milliseconds) for the locking API.
+ * @param[in] timeout     Timeout value for the locking API.
  *
  * @retval 0              Success
- * @retval - ::EBUSY      Returned without waiting.
- * @retval - ::EAGAIN     Waiting period timed out.
+ * @retval -EBUSY         Returned without waiting.
+ * @retval -EAGAIN        Waiting period timed out.
  */
-int multithreading_lock_acquire(int timeout);
+int multithreading_lock_acquire(k_timeout_t timeout);
 
 /** @brief Unlock the lock.
  *

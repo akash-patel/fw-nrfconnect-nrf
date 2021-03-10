@@ -3,39 +3,40 @@
 Building the |NCS| documentation
 ################################
 
-The |NCS| documentation is written using the reStructuredText markup
-language (.rst file extension) with Sphinx extensions and processed
-using Sphinx.
+.. contents::
+   :local:
+   :depth: 2
+
+The |NCS| documentation is written using the reStructuredText markup language (.rst file extension) with Sphinx extensions and processed using Sphinx.
 API documentation is included from Doxygen comments.
 
-See the *Documentation overview* section in the :ref:`zephyr:zephyr_doc` developer guide for information about reStructuredText.
+See :ref:`zephyr:documentation-overview` in the Zephyr developer guide for information about reStructuredText.
 
 
 Before you start
 ****************
 
 Before you can build the documentation, install the |NCS| as described in :ref:`gs_installing`.
-Make sure that you have installed the required :ref:`Python dependencies <additional_deps_win>`.
+Make sure that you have installed the required :ref:`Python dependencies <additional_deps>`.
 
-See the *Installing the documentation processors* section in the :ref:`zephyr:zephyr_doc` developer guide for information about installing the required tools to build the documentation and their supported versions.
+See :ref:`zephyr:documentation-processors` in the Zephyr developer guide for information about installing the required tools to build the documentation and their supported versions.
+In addition to these tools, you must install `mscgen`_ and make sure the ``mscgen`` executable is in your ``PATH``.
 
 .. note::
-   On Windows, the Sphinx executable ``sphinx-build.exe`` is placed in
-   the ``Scripts`` folder of your Python installation path.
-   Dependending on how you have installed Python, you may need to
-   add this folder to your ``PATH`` environment variable. Follow
-   the instructions in `Windows Python Path`_ to add those if needed.
+   On Windows, the Sphinx executable ``sphinx-build.exe`` is placed in the :file:`Scripts` folder of your Python installation path.
+   Depending on how you have installed Python, you might need to add this folder to your ``PATH`` environment variable.
+   Follow the instructions in `Windows Python Path`_ if needed.
 
 
 Documentation structure
 ***********************
 
-All documentation build files are located in the ``ncs/nrf/doc`` folder.
-The ``nrf`` subfolder in that directory contains all .rst source files that are not directly related to a sample application or a library.
-Documentation for samples and libraries are provided in a ``README.rst`` or ``*.rst`` file in the same directory as the code.
+All documentation build files are located in the :file:`ncs/nrf/doc` folder.
+The :file:`nrf` subfolder in that directory contains all :file:`.rst` source files that are not directly related to a sample application or a library.
+Documentation for samples and libraries are provided in a :file:`README.rst` or :file:`.rst` file in the same directory as the code.
 
 Building the documentation output requires building output for all documentation sets.
-Currently, there are four sets: nrf, nrfxlib, zephyr, and mcuboot.
+Currently, there are four sets: nrf, nrfxlib, zephyr, and mcuboot (covering the contents of :file:`bootloader/mcuboot`).
 Since there are links from the ncs documentation set into other documentation sets, the other documentation sets must be built first.
 
 Building documentation output
@@ -43,81 +44,95 @@ Building documentation output
 
 Complete the following steps to build the documentation output:
 
-1. Create the build folder ``ncs/nrf/doc/_build``.
+1. Open a shell and enter the doc folder :file:`ncs/nrf/doc`.
 
    * On Windows:
 
-     a. Navigate to ``ncs/nrf/doc``.
-     #. Right-click to create a folder and name it ``_build``.
-     #. Hold shift and right-click on the new folder.
-        Select **Open command window here**.
+     a. Navigate to :file:`ncs/nrf`.
+     #. Hold shift and right-click on the :file:`doc` folder.
+        Select :guilabel:`Open command window here`.
 
    * On Linux or macOS:
 
      a. Open a shell window.
-     #. Navigate to ``ncs/nrf/doc``.
+     #. Navigate to :file:`ncs/nrf/doc`.
         If the ncs folder is in your home directory, enter:
 
         .. code-block:: console
 
            cd ~/ncs/nrf/doc
 
-     #. Create a folder named ``_build`` and enter it:
-
-        .. code-block:: console
-
-           mkdir -p _build && cd _build
-
-#. Load the environment setting for Zephyr builds.
-
-   * On Windows:
-
-        .. code-block:: console
-
-           ..\..\..\zephyr\zephyr-env.cmd
-   * On Linux or macOS:
-
-        .. code-block:: console
-
-           source ../../../zephyr/zephyr-env.sh
-
 #. Generate the Ninja build files:
 
-        .. code-block:: console
+   .. code-block:: console
 
-           cmake -GNinja ..
+      cmake -GNinja -B_build .
 
-#. Run ninja to build the Zephyr documentation:
+#. Enter the generated build folder:
 
-        .. code-block:: console
+   .. code-block:: console
 
-           ninja zephyr
+      cd _build
 
-   This step can take up to 15 minutes.
-#. Run ninja to build the nrfxlib documentation:
+#. Run ninja to build the documentation:
 
-        .. code-block:: console
+   .. code-block:: console
 
-           ninja nrfxlib
+      ninja build-all
 
-#. Run ninja to build the mcuboot documentation:
+   This command will build all documentation sets.
+   Note that this process can take quite some time.
 
-        .. code-block:: console
+   Alternatively, if you want to build each documentation set separately, complete the following steps:
 
-           ninja mcuboot
+   a. Run ninja to build the Kconfig documentation:
 
-#. Run ninja to build the |NCS| documentation:
+      .. code-block:: console
 
-        .. code-block:: console
+         ninja kconfig-html
 
-           ninja nrf
+   #. Run ninja to build the Zephyr documentation:
 
-The documentation output is written to ``_build\html``. Double-click the ``index.html`` file to display the documentation in your browser.
+      .. code-block:: console
+
+         ninja zephyr
+
+      This step can take up to 15 minutes.
+
+   #. Run ninja to build the mcuboot documentation:
+
+      .. code-block:: console
+
+         ninja mcuboot
+
+   #. Run ninja to build the nrfxlib inventory file (used by nrf):
+
+      .. code-block:: console
+
+         ninja nrfxlib-inventory
+
+   #. Run ninja to build the |NCS| documentation:
+
+      .. code-block:: console
+
+         ninja nrf
+
+   #. Run ninja to build the nrfxlib documentation:
+
+      .. code-block:: console
+
+         ninja nrfxlib
+
+The documentation output is written to the :file:`_build/html` folder.
+Double-click the :file:`index.html` file to display the documentation in your browser.
 
 .. tip::
-   If you modify or add RST files, you only need to rerun the steps that build the respective documentation: step 4 (if you modified the Zephyr documentation), step 5 (if you modified the nrfxlib documentation), step 6 (if you modified the MCUboot documentation), or step 7 (if you modified the |NCS| documentation).
 
-   If you open up a new command prompt, you must repeat step 2.
+   If you modify or add RST files, you do not need to rerun the full documentation build.
+   For simple changes, it is sufficient to run the substep that builds the respective documentation (for example, only ``ninja nrf`` for changes to the |NCS| documentation).
+   If this results in unexpected build errors, follow :ref:`caching_and_cleaning` and rerun ``ninja build-all``.
+
+.. _caching_and_cleaning:
 
 Caching and cleaning
 ********************
@@ -175,13 +190,29 @@ the source tree:
    cmake -GNinja -Bbuild/ -Hncs/nrf/doc
    # Now run ninja on the generated build system:
    ninja -C build/ zephyr
-   ninja -C build/ nrfxlib
    ninja -C build/ mcuboot
+   ninja -C build/ nrfxlib-inventory
    ninja -C build/ nrf
+   ninja -C build/ nrfxlib
    # If you modify or add .rst files in the nRF repository, run ninja again:
    ninja -C build/ nrf
 
-If you want to build the documentation from scratch just delete the contents
-of the build folder and run ``cmake`` and then ``ninja`` again.
+If you want to build the documentation from scratch, delete the contents of the build folder and run ``cmake`` and then ``ninja`` again.
 
-.. _Windows Python Path: https://docs.python.org/3/using/windows.html#finding-the-python-executable
+Different versions
+******************
+
+Documentation sets for different versions of the |NCS| are defined in the :file:`doc/versions.json` file.
+This file is used to display the version drop-down in the top-left corner of the documentation.
+
+The version drop-down is displayed only if the documentation files are organized in the required folder structure and the documentation is hosted on a web server.
+To test the version drop-down locally, complete the following steps:
+
+1. In the documentation build folder (for example, :file:`_build`), rename the :file:`html` folder to :file:`latest`.
+#. Open a command window in the documentation build folder and enter the following command to start a Python web server::
+
+      python -m http.server
+
+#. Access http://localhost:8000/latest/index.html with your browser to see the documentation.
+
+To add other versions of the documentation to your local documentation output, build the versions from a tagged release and rename the :file:`html` folder to the respective version (for example, |release_number_tt|).

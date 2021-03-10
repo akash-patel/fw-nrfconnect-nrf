@@ -1,54 +1,56 @@
-.. _wheel:
+.. _nrf_desktop_wheel:
 
-wheel module
+Wheel module
 ############
 
-The ``wheel`` module is responsible for generating events related to the rotation of
-the mouse wheel.
+.. contents::
+   :local:
+   :depth: 2
 
-Module Events
+The wheel module is responsible for generating events related to the rotation of the mouse wheel.
+
+Module events
 *************
 
-+----------------+-------------+--------------+-----------------+------------------+
-| Source Module  | Input Event | This Module  | Output Event    | Sink Module      |
-+================+=============+==============+=================+==================+
-|                |             | :ref:`wheel` | ``wheel_event`` | :ref:`hid_state` |
-+----------------+-------------+--------------+-----------------+------------------+
+.. include:: event_propagation.rst
+    :start-after: table_wheel_start
+    :end-before: table_wheel_end
+
+.. note::
+    |nrf_desktop_module_event_note|
 
 Configuration
 *************
 
-The module is enabled by the ``CONFIG_DESKTOP_WHEEL_ENABLE`` define.
+Enable the module with the :option:`CONFIG_DESKTOP_WHEEL_ENABLE` Kconfig option.
 
-For detecting rotation, ``wheel`` uses Zephyr's QDEC driver. The module can be enabled
-only when QDEC is configured in DTS (:option:`CONFIG_QDEC_NRFX` is set).
+For detecting rotation, the wheel module uses Zephyr's QDEC driver.
+The module can be enabled only when QDEC is configured in DTS (that is, :option:`CONFIG_QDEC_NRFX` is set).
 
 The QDEC DTS configuration specifies how many steps are done during one full angle.
 The sensor reports the rotation data in angle degrees.
-``CONFIG_DESKTOP_WHEEL_SENSOR_VALUE_DIVIDER`` (a ``wheel`` configuration option) then converts the
-angle value into a value that is passed via the ``wheel_event`` to destination module.
+Then, :option:`CONFIG_DESKTOP_WHEEL_SENSOR_VALUE_DIVIDER` (a wheel configuration option) converts the angle value into a value that is passed with a ``wheel_event`` to the destination module.
 
-For example, configuring QDEC with 24 steps means that for each step the sensor will
-report a rotation of 15 degrees. For HID to see this rotation as increment of
-one, ``CONFIG_DESKTOP_WHEEL_SENSOR_VALUE_DIVIDER`` should be set to 15.
+For example, configuring QDEC with 24 steps means that for each step the sensor will report a rotation of 15 degrees.
+For HID to see this rotation as increment of one, :option:`CONFIG_DESKTOP_WHEEL_SENSOR_VALUE_DIVIDER` should be set to 15.
 
 Implementation details
 **********************
 
-The ``wheel`` module can be in the following states:
-    * ``STATE_DISABLED``
-    * ``STATE_ACTIVE_IDLE``
-    * ``STATE_ACTIVE``
-    * ``STATE_SUSPENDED``
+The wheel module can be in the following states:
 
-When in ``STATE_ACTIVE``, ``wheel`` enables the QDEC driver and waits for callback
-that indicates rotation. The QDEC driver may consume power during its operation. If no
-rotation is detected after the time specified in
-``CONFIG_DESKTOP_WHEEL_SENSOR_IDLE_TIMEOUT``, ``wheel`` switches
-to ``STATE_ACTIVE_IDLE``, in which QDEC is disabled. In this state, the rotation is
-detected using GPIO interrupts. When the rotation is detected, ``wheel`` switches
-back to ``STATE_ACTIVE``.
+* ``STATE_DISABLED``
+* ``STATE_ACTIVE_IDLE``
+* ``STATE_ACTIVE``
+* ``STATE_SUSPENDED``
 
-When the system enters the low power state, ``wheel`` goes to ``STATE_SUSPENDED``.
-In this state, the rotation is detected using the GPIO interrupts. The module issues
-a system wakeup event on wheel movement.
+When in ``STATE_ACTIVE``, the module enables the QDEC driver and waits for callback that indicates rotation.
+The QDEC driver may consume power during its operation.
+
+If no rotation is detected after the time specified in :option:`CONFIG_DESKTOP_WHEEL_SENSOR_IDLE_TIMEOUT`, the wheel module switches to ``STATE_ACTIVE_IDLE``, in which QDEC is disabled.
+In this state, the rotation is detected using GPIO interrupts.
+When the rotation is detected, the module switches back to ``STATE_ACTIVE``.
+
+When the system enters the low power state, the wheel module goes to ``STATE_SUSPENDED``.
+In this state, the rotation is detected using the GPIO interrupts.
+The module issues a system wake-up event on wheel movement.

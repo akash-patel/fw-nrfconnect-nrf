@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <logging/log.h>
@@ -22,8 +22,8 @@ static struct k_delayed_work leds_update_work;
 static void leds_update(struct k_work *work)
 {
 	static bool led_on;
-	static u8_t current_led_on_mask;
-	u8_t led_on_mask;
+	static uint8_t current_led_on_mask;
+	uint8_t led_on_mask;
 
 	led_on_mask = UI_LED_GET_ON(current_led_state);
 	led_on = !led_on;
@@ -44,10 +44,10 @@ static void leds_update(struct k_work *work)
 	if (work) {
 		if (led_on) {
 			k_delayed_work_submit(&leds_update_work,
-						UI_LED_ON_PERIOD_NORMAL);
+					      K_MSEC(UI_LED_ON_PERIOD_NORMAL));
 		} else {
 			k_delayed_work_submit(&leds_update_work,
-						UI_LED_OFF_PERIOD_NORMAL);
+					      K_MSEC(UI_LED_OFF_PERIOD_NORMAL));
 		}
 	}
 }
@@ -68,7 +68,7 @@ enum ui_led_pattern ui_led_get_pattern(void)
 	return current_led_state;
 }
 
-int ui_led_set_color(u8_t red, u8_t green, u8_t blue)
+int ui_led_set_color(uint8_t red, uint8_t green, uint8_t blue)
 {
 #ifdef CONFIG_UI_LED_USE_PWM
 	return ui_led_set_rgb(red, green, blue);
@@ -77,7 +77,7 @@ int ui_led_set_color(u8_t red, u8_t green, u8_t blue)
 #endif /* CONFIG_UI_LED_USE_PWM */
 }
 
-void ui_led_set_state(u32_t led, u8_t value)
+void ui_led_set_state(uint32_t led, uint8_t value)
 {
 #if !defined(CONFIG_UI_LED_USE_PWM)
 	if (value) {

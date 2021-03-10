@@ -1,13 +1,13 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <zephyr.h>
 
 #include <device.h>
-#include <gpio.h>
+#include <drivers/gpio.h>
 
 #include "port_state.h"
 #include "port_state_def.h"
@@ -25,7 +25,7 @@ static int port_setup(const char *name,
 		      const struct pin_state pin_state[],
 		      size_t cnt)
 {
-	struct device *gpio_dev = device_get_binding(name);
+	const struct device *gpio_dev = device_get_binding(name);
 	int err = 0;
 
 	if (!gpio_dev) {
@@ -36,11 +36,11 @@ static int port_setup(const char *name,
 	for (size_t i = 0; i < cnt; i++) {
 		err = gpio_pin_configure(gpio_dev,
 					 pin_state[i].pin,
-					 GPIO_DIR_OUT);
+					 GPIO_OUTPUT);
 		if (!err) {
-			err = gpio_pin_write(gpio_dev,
-					     pin_state[i].pin,
-					     pin_state[i].val);
+			err = gpio_pin_set_raw(gpio_dev,
+					       pin_state[i].pin,
+					       pin_state[i].val);
 		} else {
 			LOG_ERR("Cannot configure pin %u on %s",
 				    pin_state[i].pin, name);

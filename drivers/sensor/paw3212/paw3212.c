@@ -1,29 +1,30 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <zephyr.h>
 #include <kernel.h>
-#include <sensor.h>
+#include <drivers/sensor.h>
 #include <device.h>
-#include <spi.h>
-#include <gpio.h>
-#include <misc/byteorder.h>
+#include <drivers/spi.h>
+#include <drivers/gpio.h>
+#include <sys/byteorder.h>
 #include <sensor/paw3212.h>
 
 #include <logging/log.h>
 LOG_MODULE_REGISTER(paw3212, CONFIG_PAW3212_LOG_LEVEL);
 
+#define DT_DRV_COMPAT pixart_paw3212
 
-#define PAW3212_SPI_DEV_NAME DT_INST_0_PIXART_PAW3212_BUS_NAME
+#define PAW3212_SPI_DEV_NAME DT_BUS_LABEL(DT_DRV_INST(0))
 
-#define PAW3212_IRQ_GPIO_DEV_NAME DT_INST_0_PIXART_PAW3212_IRQ_GPIOS_CONTROLLER
-#define PAW3212_IRQ_GPIO_PIN      DT_INST_0_PIXART_PAW3212_IRQ_GPIOS_PIN
+#define PAW3212_IRQ_GPIO_DEV_NAME DT_INST_GPIO_LABEL(0, irq_gpios)
+#define PAW3212_IRQ_GPIO_PIN      DT_INST_GPIO_PIN(0, irq_gpios)
 
-#define PAW3212_CS_GPIO_DEV_NAME DT_INST_0_PIXART_PAW3212_CS_GPIOS_CONTROLLER
-#define PAW3212_CS_GPIO_PIN      DT_INST_0_PIXART_PAW3212_CS_GPIOS_PIN
+#define PAW3212_CS_GPIO_DEV_NAME DT_INST_SPI_DEV_CS_GPIOS_LABEL(0)
+#define PAW3212_CS_GPIO_PIN      DT_INST_SPI_DEV_CS_GPIOS_PIN(0)
 
 
 /* Timings defined by spec */
@@ -40,6 +41,7 @@ LOG_MODULE_REGISTER(paw3212, CONFIG_PAW3212_LOG_LEVEL);
 #define PAW3212_REG_MOTION		0x02
 #define PAW3212_REG_DELTA_X_LOW		0x03
 #define PAW3212_REG_DELTA_Y_LOW		0x04
+#define PAW3212_REG_OPERATION_MODE	0x05
 #define PAW3212_REG_CONFIGURATION	0x06
 #define PAW3212_REG_WRITE_PROTECT	0x09
 #define PAW3212_REG_DELTA_XY_HIGH	0x12
@@ -56,6 +58,10 @@ LOG_MODULE_REGISTER(paw3212, CONFIG_PAW3212_LOG_LEVEL);
 #define PAW3212_CPI_MAX			(0x3F * PAW3212_CPI_STEP)
 
 /* Sleep */
+#define PAW3212_SLP_ENH_POS		4u
+#define PAW3212_SLP2_ENH_POS		3u
+#define PAW3212_SLP3_ENH_POS		5u
+
 #define PAW3212_ETM_POS			0u
 #define PAW3212_ETM_SIZE		4u
 #define PAW3212_FREQ_POS		(PAW3212_ETM_POS + PAW3212_ETM_SIZE)
@@ -105,13 +111,13 @@ enum async_init_step {
 };
 
 struct paw3212_data {
-	struct device                *cs_gpio_dev;
-	struct device                *irq_gpio_dev;
-	struct device                *spi_dev;
+	const struct device          *cs_gpio_dev;
+	const struct device          *irq_gpio_dev;
+	const struct device          *spi_dev;
 	struct gpio_callback         irq_gpio_cb;
 	struct k_spinlock            lock;
-	s16_t                        x;
-	s16_t                        y;
+	int16_t                        x;
+	int16_t                        y;
 	sensor_trigger_handler_t     data_ready_handler;
 	struct k_work                trigger_handler_work;
 	struct k_delayed_work        init_work;
@@ -123,11 +129,11 @@ struct paw3212_data {
 static const struct spi_config spi_cfg = {
 	.operation = SPI_WORD_SET(8) | SPI_TRANSFER_MSB |
 		     SPI_MODE_CPOL | SPI_MODE_CPHA,
-	.frequency = DT_INST_0_PIXART_PAW3212_SPI_MAX_FREQUENCY,
-	.slave = DT_INST_0_PIXART_PAW3212_BASE_ADDRESS,
+	.frequency = DT_PROP(DT_DRV_INST(0), spi_max_frequency),
+	.slave = DT_REG_ADDR(DT_DRV_INST(0)),
 };
 
-static const s32_t async_init_delay[ASYNC_INIT_STEP_COUNT] = {
+static const int32_t async_init_delay[ASYNC_INIT_STEP_COUNT] = {
 	[ASYNC_INIT_STEP_POWER_UP]  = 1,
 	[ASYNC_INIT_STEP_VERIFY_ID] = 0,
 	[ASYNC_INIT_STEP_CONFIGURE] = 0,
@@ -147,13 +153,11 @@ static int (* const async_init_fn[ASYNC_INIT_STEP_COUNT])(struct paw3212_data *d
 
 
 static struct paw3212_data paw3212_data;
-DEVICE_DECLARE(paw3212);
 
-
-static s16_t expand_s12(s16_t x)
+static int16_t expand_s12(int16_t x)
 {
 	/* Left shifting of negative values is undefined behavior, so we cannot
-	 * depend on automatic integer promotion (it will convert s16_t to int).
+	 * depend on automatic integer promotion (it will convert int16_t to int).
 	 * To expand sign we cast s16 to unsigned int and left shift it then
 	 * cast it to signed integer and do the right shift. Since type is
 	 * signed compiler will perform arithmetic shift. This last operation
@@ -165,15 +169,15 @@ static s16_t expand_s12(s16_t x)
 
 static int spi_cs_ctrl(struct paw3212_data *dev_data, bool enable)
 {
-	u32_t val = (enable) ? (0) : (1);
+	int val = (enable) ? (0) : (1);
 	int err;
 
 	if (!enable) {
 		k_busy_wait(T_NCS_SCLK);
 	}
 
-	err = gpio_pin_write(dev_data->cs_gpio_dev, PAW3212_CS_GPIO_PIN,
-			     val);
+	err = gpio_pin_set_raw(dev_data->cs_gpio_dev, PAW3212_CS_GPIO_PIN, val);
+
 	if (err) {
 		LOG_ERR("SPI CS ctrl failed");
 	}
@@ -185,7 +189,7 @@ static int spi_cs_ctrl(struct paw3212_data *dev_data, bool enable)
 	return err;
 }
 
-static int reg_read(struct paw3212_data *dev_data, u8_t reg, u8_t *buf)
+static int reg_read(struct paw3212_data *dev_data, uint8_t reg, uint8_t *buf)
 {
 	int err;
 
@@ -240,7 +244,7 @@ static int reg_read(struct paw3212_data *dev_data, u8_t reg, u8_t *buf)
 	return 0;
 }
 
-static int reg_write(struct paw3212_data *dev_data, u8_t reg, u8_t val)
+static int reg_write(struct paw3212_data *dev_data, uint8_t reg, uint8_t val)
 {
 	int err;
 
@@ -251,7 +255,7 @@ static int reg_write(struct paw3212_data *dev_data, u8_t reg, u8_t val)
 		return err;
 	}
 
-	u8_t buf[] = {
+	uint8_t buf[] = {
 		SPI_WRITE_BIT | reg,
 		val
 	};
@@ -282,7 +286,7 @@ static int reg_write(struct paw3212_data *dev_data, u8_t reg, u8_t val)
 	return 0;
 }
 
-static int update_cpi(struct paw3212_data *dev_data, u32_t cpi)
+static int update_cpi(struct paw3212_data *dev_data, uint32_t cpi)
 {
 	int err;
 
@@ -291,7 +295,7 @@ static int update_cpi(struct paw3212_data *dev_data, u32_t cpi)
 		return -EINVAL;
 	}
 
-	u8_t regval = cpi / PAW3212_CPI_STEP;
+	uint8_t regval = cpi / PAW3212_CPI_STEP;
 
 	LOG_INF("Set CPI: %u (requested: %u, reg:0x%" PRIx8 ")",
 		regval * PAW3212_CPI_STEP, cpi, regval);
@@ -322,10 +326,10 @@ static int update_cpi(struct paw3212_data *dev_data, u32_t cpi)
 	return err;
 }
 
-static int update_sleep_timeout(struct paw3212_data *dev_data, u8_t reg_addr,
-				u32_t timeout_ms)
+static int update_sleep_timeout(struct paw3212_data *dev_data, uint8_t reg_addr,
+				uint32_t timeout_ms)
 {
-	u32_t timeout_step_ms;
+	uint32_t timeout_step_ms;
 
 	switch (reg_addr) {
 	case PAW3212_REG_SLEEP1:
@@ -342,7 +346,7 @@ static int update_sleep_timeout(struct paw3212_data *dev_data, u8_t reg_addr,
 		return -ENOTSUP;
 	}
 
-	u32_t etm = timeout_ms / timeout_step_ms - 1;
+	uint32_t etm = timeout_ms / timeout_step_ms - 1;
 
 	if ((etm < PAW3212_ETM_MIN) || (etm > PAW3212_ETM_MAX)) {
 		LOG_WRN("Sleep timeout %" PRIu32 " out of range", timeout_ms);
@@ -363,7 +367,7 @@ static int update_sleep_timeout(struct paw3212_data *dev_data, u8_t reg_addr,
 		return err;
 	}
 
-	u8_t regval;
+	uint8_t regval;
 
 	err = reg_read(dev_data, reg_addr, &regval);
 	if (err) {
@@ -390,13 +394,154 @@ static int update_sleep_timeout(struct paw3212_data *dev_data, u8_t reg_addr,
 	return err;
 }
 
-static void irq_handler(struct device *gpiob, struct gpio_callback *cb,
-			u32_t pins)
+static int update_sample_time(struct paw3212_data *dev_data, uint8_t reg_addr,
+			      uint32_t sample_time_ms)
+{
+	uint32_t sample_time_step;
+	uint32_t sample_time_min;
+	uint32_t sample_time_max;
+
+	switch (reg_addr) {
+	case PAW3212_REG_SLEEP1:
+		sample_time_step = 4;
+		sample_time_min = 4;
+		sample_time_max = 64;
+		break;
+
+	case PAW3212_REG_SLEEP2:
+	case PAW3212_REG_SLEEP3:
+		sample_time_step = 64;
+		sample_time_min = 64;
+		sample_time_max = 1024;
+		break;
+
+	default:
+		LOG_ERR("Not supported");
+		return -ENOTSUP;
+	}
+
+	if ((sample_time_ms > sample_time_max) ||
+	    (sample_time_ms < sample_time_min))	{
+		LOG_WRN("Sample time %" PRIu32 " out of range", sample_time_ms);
+		return -EINVAL;
+	}
+
+	uint8_t reg_freq = (sample_time_ms - sample_time_min) / sample_time_step;
+
+	LOG_INF("Set sleep%d sample time: %u (requested: %u, reg:0x%" PRIx8 ")",
+		reg_addr - PAW3212_REG_SLEEP1 + 1,
+		(reg_freq * sample_time_step) + sample_time_min,
+		sample_time_ms,
+		reg_freq);
+
+	__ASSERT_NO_MSG(reg_freq <= PAW3212_FREQ_MAX);
+
+	int err;
+
+	err = reg_write(dev_data, PAW3212_REG_WRITE_PROTECT, PAW3212_WPMAGIC);
+	if (err) {
+		LOG_ERR("Cannot disable write protect");
+		return err;
+	}
+
+	uint8_t regval;
+
+	err = reg_read(dev_data, reg_addr, &regval);
+	if (err) {
+		LOG_ERR("Failed to read sleep register");
+		return err;
+	}
+
+	regval &= ~PAW3212_FREQ_MASK;
+	regval |= (reg_freq << PAW3212_FREQ_POS);
+
+	err = reg_write(dev_data, reg_addr, regval);
+	if (err) {
+		LOG_ERR("Failed to change sample time");
+		return err;
+	}
+
+	err = reg_write(dev_data, PAW3212_REG_WRITE_PROTECT, 0);
+	if (err) {
+		LOG_ERR("Cannot enable write protect");
+	}
+
+	return err;
+}
+
+static int toggle_sleep_modes(struct paw3212_data *dev_data, uint8_t reg_addr1, uint8_t reg_addr2,
+			      bool enable)
+{
+	int err = reg_write(dev_data, PAW3212_REG_WRITE_PROTECT,
+			    PAW3212_WPMAGIC);
+	if (err) {
+		LOG_ERR("Cannot disable write protect");
+		return err;
+	}
+
+	uint8_t regval;
+
+	LOG_INF("%sable sleep", (enable) ? ("En") : ("Dis"));
+
+	/* Sleep 1 and Sleep 2 */
+	err = reg_read(dev_data, reg_addr1, &regval);
+	if (err) {
+		LOG_ERR("Failed to read operation mode register");
+		return err;
+	}
+
+	uint8_t sleep_enable_mask = BIT(PAW3212_SLP_ENH_POS) |
+				 BIT(PAW3212_SLP2_ENH_POS);
+
+	if (enable) {
+		regval |= sleep_enable_mask;
+	} else {
+		regval &= ~sleep_enable_mask;
+	}
+
+	err = reg_write(dev_data, reg_addr1, regval);
+	if (err) {
+		LOG_ERR("Failed to %sable sleep", (enable) ? ("en") : ("dis"));
+		return err;
+	}
+
+	/* Sleep 3 */
+	err = reg_read(dev_data, reg_addr2, &regval);
+	if (err) {
+		LOG_ERR("Failed to read configuration register");
+		return err;
+	}
+
+	sleep_enable_mask = BIT(PAW3212_SLP3_ENH_POS);
+
+	if (enable) {
+		regval |= sleep_enable_mask;
+	} else {
+		regval &= ~sleep_enable_mask;
+	}
+
+	err = reg_write(dev_data, reg_addr2, regval);
+	if (err) {
+		LOG_ERR("Failed to %sable sleep", (enable) ? ("en") : ("dis"));
+		return err;
+	}
+
+	err = reg_write(dev_data, PAW3212_REG_WRITE_PROTECT, 0);
+	if (err) {
+		LOG_ERR("Cannot enable write protect");
+	}
+
+	return err;
+}
+
+static void irq_handler(const struct device *gpiob, struct gpio_callback *cb,
+			uint32_t pins)
 {
 	int err;
 
-	err = gpio_pin_disable_callback(paw3212_data.irq_gpio_dev,
-					PAW3212_IRQ_GPIO_PIN);
+	err = gpio_pin_interrupt_configure(paw3212_data.irq_gpio_dev,
+					   PAW3212_IRQ_GPIO_PIN,
+					   GPIO_INT_DISABLE);
 	if (unlikely(err)) {
 		LOG_ERR("Cannot disable IRQ");
 		k_panic();
@@ -423,12 +568,13 @@ static void trigger_handler(struct k_work *work)
 		.chan = SENSOR_CHAN_ALL,
 	};
 
-	handler(DEVICE_GET(paw3212), &trig);
+	handler(DEVICE_DT_INST_GET(0), &trig);
 
 	key = k_spin_lock(&paw3212_data.lock);
 	if (paw3212_data.data_ready_handler) {
-		err = gpio_pin_enable_callback(paw3212_data.irq_gpio_dev,
-					       PAW3212_IRQ_GPIO_PIN);
+		err = gpio_pin_interrupt_configure(paw3212_data.irq_gpio_dev,
+						   PAW3212_IRQ_GPIO_PIN,
+						   GPIO_INT_LEVEL_LOW);
 	}
 	k_spin_unlock(&paw3212_data.lock, key);
 
@@ -448,7 +594,7 @@ static int paw3212_async_init_verify_id(struct paw3212_data *dev_data)
 {
 	int err;
 
-	u8_t product_id;
+	uint8_t product_id;
 	err = reg_read(dev_data, PAW3212_REG_PRODUCT_ID, &product_id);
 	if (err) {
 		LOG_ERR("Cannot obtain product ID");
@@ -470,7 +616,7 @@ static int paw3212_async_init_configure(struct paw3212_data *dev_data)
 
 	err = reg_write(dev_data, PAW3212_REG_WRITE_PROTECT, PAW3212_WPMAGIC);
 	if (!err) {
-		u8_t mouse_option = 0;
+		uint8_t mouse_option = 0;
 
 		if (IS_ENABLED(CONFIG_PAW3212_ORIENTATION_90)) {
 			mouse_option |= PAW3212_MOUSE_OPT_XY_SWAP |
@@ -516,7 +662,8 @@ static void paw3212_async_init(struct k_work *work)
 			LOG_INF("PAW3212 initialized");
 		} else {
 			k_delayed_work_submit(&dev_data->init_work,
-					      async_init_delay[dev_data->async_init_step]);
+					      K_MSEC(async_init_delay[
+						dev_data->async_init_step]));
 		}
 	}
 }
@@ -534,7 +681,7 @@ static int paw3212_init_cs(struct paw3212_data *dev_data)
 
 	err = gpio_pin_configure(dev_data->cs_gpio_dev,
 				 PAW3212_CS_GPIO_PIN,
-				 GPIO_DIR_OUT);
+				 GPIO_OUTPUT);
 	if (!err) {
 		err = spi_cs_ctrl(dev_data, false);
 	} else {
@@ -557,8 +704,7 @@ static int paw3212_init_irq(struct paw3212_data *dev_data)
 
 	err = gpio_pin_configure(dev_data->irq_gpio_dev,
 				 PAW3212_IRQ_GPIO_PIN,
-				 GPIO_DIR_IN | GPIO_INT | GPIO_PUD_PULL_UP |
-				 GPIO_INT_LEVEL | GPIO_INT_ACTIVE_LOW);
+				 GPIO_INPUT | GPIO_PULL_UP);
 	if (err) {
 		LOG_ERR("Cannot configure IRQ GPIO");
 		return err;
@@ -568,6 +714,7 @@ static int paw3212_init_irq(struct paw3212_data *dev_data)
 			   BIT(PAW3212_IRQ_GPIO_PIN));
 
 	err = gpio_add_callback(dev_data->irq_gpio_dev, &dev_data->irq_gpio_cb);
+
 	if (err) {
 		LOG_ERR("Cannot add IRQ GPIO callback");
 	}
@@ -586,7 +733,7 @@ static int paw3212_init_spi(struct paw3212_data *dev_data)
 	return 0;
 }
 
-static int paw3212_init(struct device *dev)
+static int paw3212_init(const struct device *dev)
 {
 	struct paw3212_data *dev_data = &paw3212_data;
 	int err;
@@ -616,15 +763,16 @@ static int paw3212_init(struct device *dev)
 	k_delayed_work_init(&dev_data->init_work, paw3212_async_init);
 
 	k_delayed_work_submit(&dev_data->init_work,
-			      async_init_delay[dev_data->async_init_step]);
+			      K_MSEC(async_init_delay[
+				dev_data->async_init_step]));
 
 	return err;
 }
 
-static int paw3212_sample_fetch(struct device *dev, enum sensor_channel chan)
+static int paw3212_sample_fetch(const struct device *dev, enum sensor_channel chan)
 {
 	struct paw3212_data *dev_data = &paw3212_data;
-	u8_t motion_status;
+	uint8_t motion_status;
 	int err;
 
 	ARG_UNUSED(dev);
@@ -645,8 +793,8 @@ static int paw3212_sample_fetch(struct device *dev, enum sensor_channel chan)
 	}
 
 	if ((motion_status & PAW3212_MOTION_STATUS_MOTION) != 0) {
-		u8_t x_low;
-		u8_t y_low;
+		uint8_t x_low;
+		uint8_t y_low;
 
 		if ((motion_status & PAW3212_MOTION_STATUS_DXOVF) != 0) {
 			LOG_WRN("X delta overflowed");
@@ -668,7 +816,7 @@ static int paw3212_sample_fetch(struct device *dev, enum sensor_channel chan)
 		}
 
 		if (IS_ENABLED(CONFIG_PAW3212_12_BIT_MODE)) {
-			u8_t xy_high;
+			uint8_t xy_high;
 
 			err = reg_read(dev_data, PAW3212_REG_DELTA_XY_HIGH,
 				       &xy_high);
@@ -680,8 +828,8 @@ static int paw3212_sample_fetch(struct device *dev, enum sensor_channel chan)
 			dev_data->x = PAW3212_DELTA_X(xy_high, x_low);
 			dev_data->y = PAW3212_DELTA_Y(xy_high, y_low);
 		} else {
-			dev_data->x = (s8_t)x_low;
-			dev_data->y = (s8_t)y_low;
+			dev_data->x = (int8_t)x_low;
+			dev_data->y = (int8_t)y_low;
 		}
 	} else {
 		dev_data->x = 0;
@@ -691,7 +839,7 @@ static int paw3212_sample_fetch(struct device *dev, enum sensor_channel chan)
 	return err;
 }
 
-static int paw3212_channel_get(struct device *dev, enum sensor_channel chan,
+static int paw3212_channel_get(const struct device *dev, enum sensor_channel chan,
 			       struct sensor_value *val)
 {
 	struct paw3212_data *dev_data = &paw3212_data;
@@ -721,7 +869,7 @@ static int paw3212_channel_get(struct device *dev, enum sensor_channel chan,
 	return 0;
 }
 
-static int paw3212_trigger_set(struct device *dev,
+static int paw3212_trigger_set(const struct device *dev,
 			       const struct sensor_trigger *trig,
 			       sensor_trigger_handler_t handler)
 {
@@ -746,11 +894,13 @@ static int paw3212_trigger_set(struct device *dev,
 	k_spinlock_key_t key = k_spin_lock(&dev_data->lock);
 
 	if (handler) {
-		err = gpio_pin_enable_callback(dev_data->irq_gpio_dev,
-					       PAW3212_IRQ_GPIO_PIN);
+		err = gpio_pin_interrupt_configure(dev_data->irq_gpio_dev,
+						   PAW3212_IRQ_GPIO_PIN,
+						   GPIO_INT_LEVEL_LOW);
 	} else {
-		err = gpio_pin_disable_callback(dev_data->irq_gpio_dev,
-						PAW3212_IRQ_GPIO_PIN);
+		err = gpio_pin_interrupt_configure(dev_data->irq_gpio_dev,
+						   PAW3212_IRQ_GPIO_PIN,
+						   GPIO_INT_DISABLE);
 	}
 
 	if (!err) {
@@ -762,7 +912,7 @@ static int paw3212_trigger_set(struct device *dev,
 	return err;
 }
 
-static int paw3212_attr_set(struct device *dev, enum sensor_channel chan,
+static int paw3212_attr_set(const struct device *dev, enum sensor_channel chan,
 			    enum sensor_attribute attr,
 			    const struct sensor_value *val)
 {
@@ -780,9 +930,16 @@ static int paw3212_attr_set(struct device *dev, enum sensor_channel chan,
 		return -EBUSY;
 	}
 
-	switch ((u32_t)attr) {
+	switch ((uint32_t)attr) {
 	case PAW3212_ATTR_CPI:
 		err = update_cpi(dev_data, PAW3212_SVALUE_TO_CPI(*val));
+		break;
+
+	case PAW3212_ATTR_SLEEP_ENABLE:
+		err = toggle_sleep_modes(dev_data,
+					 PAW3212_REG_OPERATION_MODE,
+					 PAW3212_REG_CONFIGURATION,
+					 PAW3212_SVALUE_TO_BOOL(*val));
 		break;
 
 	case PAW3212_ATTR_SLEEP1_TIMEOUT:
@@ -803,6 +960,24 @@ static int paw3212_attr_set(struct device *dev, enum sensor_channel chan,
 					   PAW3212_SVALUE_TO_TIME(*val));
 		break;
 
+	case PAW3212_ATTR_SLEEP1_SAMPLE_TIME:
+		err = update_sample_time(dev_data,
+					 PAW3212_REG_SLEEP1,
+					 PAW3212_SVALUE_TO_TIME(*val));
+		break;
+
+	case PAW3212_ATTR_SLEEP2_SAMPLE_TIME:
+		err = update_sample_time(dev_data,
+					 PAW3212_REG_SLEEP2,
+					 PAW3212_SVALUE_TO_TIME(*val));
+		break;
+
+	case PAW3212_ATTR_SLEEP3_SAMPLE_TIME:
+		err = update_sample_time(dev_data,
+					 PAW3212_REG_SLEEP3,
+					 PAW3212_SVALUE_TO_TIME(*val));
+		break;
+
 	default:
 		LOG_ERR("Unknown attribute");
 		return -ENOTSUP;
@@ -818,6 +993,6 @@ static const struct sensor_driver_api paw3212_driver_api = {
 	.attr_set     = paw3212_attr_set,
 };
 
-DEVICE_AND_API_INIT(paw3212, DT_INST_0_PIXART_PAW3212_LABEL, paw3212_init,
-		    NULL, NULL, POST_KERNEL, CONFIG_SENSOR_INIT_PRIORITY,
-		    &paw3212_driver_api);
+DEVICE_DT_INST_DEFINE(0, paw3212_init, device_pm_control_nop,
+		      NULL, NULL, POST_KERNEL, CONFIG_SENSOR_INIT_PRIORITY,
+		      &paw3212_driver_api);

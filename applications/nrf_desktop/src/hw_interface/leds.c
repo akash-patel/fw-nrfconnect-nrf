@@ -1,12 +1,12 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <zephyr.h>
 #include <assert.h>
-#include <pwm.h>
+#include <drivers/pwm.h>
 
 #include "power_event.h"
 #include "led_event.h"
@@ -22,12 +22,12 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_DESKTOP_LED_LOG_LEVEL);
 #define LED_ID(led) ((led) - &leds[0])
 
 struct led {
-	struct device *pwm_dev;
+	const struct device *pwm_dev;
 
 	struct led_color color;
 	const struct led_effect *effect;
-	u16_t effect_step;
-	u16_t effect_substep;
+	uint16_t effect_step;
+	uint16_t effect_substep;
 
 	struct k_delayed_work work;
 };
@@ -38,9 +38,15 @@ static struct led leds[CONFIG_DESKTOP_LED_COUNT];
 static void pwm_out(struct led *led, struct led_color *color)
 {
 	for (size_t i = 0; i < ARRAY_SIZE(color->c); i++) {
-		pwm_pin_set_usec(led->pwm_dev, led_pins[LED_ID(led)][i],
-				 CONFIG_DESKTOP_LED_BRIGHTNESS_MAX,
-				 color->c[i]);
+		int err = pwm_pin_set_usec(led->pwm_dev,
+					   led_pins[LED_ID(led)][i],
+					   CONFIG_DESKTOP_LED_BRIGHTNESS_MAX,
+					   color->c[i],
+					   0);
+
+		if (err) {
+			LOG_ERR("Cannot set PWM output (err: %d)", err);
+		}
 	}
 }
 
@@ -88,10 +94,10 @@ static void work_handler(struct k_work *work)
 	}
 
 	if (led->effect_step < led->effect->step_count) {
-		s32_t next_delay =
+		int32_t next_delay =
 			led->effect->steps[led->effect_step].substep_time;
 
-		k_delayed_work_submit(&led->work, next_delay);
+		k_delayed_work_submit(&led->work, K_MSEC(next_delay));
 	}
 }
 
@@ -110,10 +116,10 @@ static void led_update(struct led *led)
 	__ASSERT_NO_MSG(led->effect->steps);
 
 	if (led->effect->step_count > 0) {
-		s32_t next_delay =
+		int32_t next_delay =
 			led->effect->steps[led->effect_step].substep_time;
 
-		k_delayed_work_submit(&led->work, next_delay);
+		k_delayed_work_submit(&led->work, K_MSEC(next_delay));
 	} else {
 		LOG_WRN("LED effect with no effect");
 	}
@@ -122,23 +128,23 @@ static void led_update(struct led *led)
 static int leds_init(void)
 {
 	const char *dev_name[] = {
-#if CONFIG_PWM_0
-		DT_NORDIC_NRF_PWM_PWM_0_LABEL,
+#if defined(CONFIG_PWM) && DT_NODE_HAS_STATUS(DT_NODELABEL(pwm0), okay)
+		DT_LABEL(DT_NODELABEL(pwm0)),
 #endif
-#if CONFIG_PWM_1
-		DT_NORDIC_NRF_PWM_PWM_1_LABEL,
+#if defined(CONFIG_PWM) && DT_NODE_HAS_STATUS(DT_NODELABEL(pwm1), okay)
+		DT_LABEL(DT_NODELABEL(pwm1)),
 #endif
-#if CONFIG_PWM_2
-		DT_NORDIC_NRF_PWM_PWM_2_LABEL,
+#if defined(CONFIG_PWM) && DT_NODE_HAS_STATUS(DT_NODELABEL(pwm2), okay)
+		DT_LABEL(DT_NODELABEL(pwm2)),
 #endif
-#if CONFIG_PWM_3
-		DT_NORDIC_NRF_PWM_PWM_3_LABEL,
+#if defined(CONFIG_PWM) && DT_NODE_HAS_STATUS(DT_NODELABEL(pwm3), okay)
+		DT_LABEL(DT_NODELABEL(pwm3)),
 #endif
 	};
 
 	int err = 0;
 
-	BUILD_ASSERT_MSG(ARRAY_SIZE(leds) <= ARRAY_SIZE(dev_name),
+	BUILD_ASSERT(ARRAY_SIZE(leds) <= ARRAY_SIZE(dev_name),
 			 "not enough PWMs");
 
 	for (size_t i = 0; (i < ARRAY_SIZE(leds)) && !err; i++) {

@@ -1,11 +1,15 @@
 #
 # Copyright (c) 2018 Nordic Semiconductor
 #
-# SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
-# Point to NCS root directory.
-set(NRF_DIR ${CMAKE_CURRENT_LIST_DIR}/..)
+# This boilerplate is automatically included through ZephyrBuildConfig.cmake, found in
+# ${NRF_DIR}/share/zephyrbuild-package/cmake/ZephyrBuildConfig.cmake
+# For more information regarding the Zephyr Build Configuration CMake package, please refer to:
+# https://developer.nordicsemi.com/nRF_Connect_SDK/doc/latest/zephyr/guides/zephyr_cmake_package.html#zephyr-build-configuration-cmake-package
+
+include(${NRF_DIR}/boards/deprecated.cmake)
 
 if(NOT BOARD)
         set(BOARD $ENV{BOARD})
@@ -24,9 +28,3 @@ if(DEFINED NRF_SUPPORTED_BUILD_TYPES)
                 message(FATAL_ERROR "${CMAKE_BUILD_TYPE} variant is not supported")
         endif()
 endif()
-
-# Add NRF_DIR as a BOARD_ROOT in case the board is in NRF_DIR
-list(APPEND BOARD_ROOT ${NRF_DIR})
-
-# Add NRF_DIR as a DTS_ROOT to include nrf/dts
-list(APPEND DTS_ROOT ${NRF_DIR})

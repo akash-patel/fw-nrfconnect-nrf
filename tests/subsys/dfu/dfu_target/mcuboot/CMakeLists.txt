@@ -1,11 +1,12 @@
 #
 # Copyright (c) 2019 Nordic Semiconductor
 #
-# SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
 cmake_minimum_required(VERSION 3.13.1)
-include($ENV{ZEPHYR_BASE}/cmake/app/boilerplate.cmake NO_POLICY_SCOPE)
+
+find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(dfu_target_test)
 
 FILE(GLOB app_sources src/*.c)
@@ -13,7 +14,7 @@ target_sources(app PRIVATE ${app_sources})
 
 target_sources(app
   PRIVATE
-  ${ZEPHYR_BASE}/../nrf/subsys/dfu/src/dfu_target.c
+  ${ZEPHYR_BASE}/../nrf/subsys/dfu/dfu_target/src/dfu_target.c
   )
 
 target_include_directories(app

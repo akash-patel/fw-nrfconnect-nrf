@@ -1,8 +1,8 @@
 sample:
   name: BH1749 Sensor Sample
 tests:
-  test:
+  samples.sensor.bh1749:
     harness: sensor
     tags: sensors
-    platform_whitelist: nrf9160_pca20035
+    platform_allow: thingy91_nrf9160
     depends_on: i2c

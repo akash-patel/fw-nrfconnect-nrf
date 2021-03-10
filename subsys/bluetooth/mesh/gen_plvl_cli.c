@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 #include <bluetooth/mesh/gen_plvl_cli.h>
 #include "model_utils.h"
@@ -48,10 +48,10 @@ static void handle_last_status(struct bt_mesh_model *mod,
 	}
 
 	struct bt_mesh_plvl_cli *cli = mod->user_data;
-	u16_t last = net_buf_simple_pull_le16(buf);
+	uint16_t last = net_buf_simple_pull_le16(buf);
 
-	if (model_ack_match(&cli->ack_ctx, BT_MESH_PLVL_OP_LEVEL_STATUS, ctx)) {
-		u16_t *rsp = cli->ack_ctx.user_data;
+	if (model_ack_match(&cli->ack_ctx, BT_MESH_PLVL_OP_LAST_STATUS, ctx)) {
+		uint16_t *rsp = cli->ack_ctx.user_data;
 		*rsp = last;
 		model_ack_rx(&cli->ack_ctx);
 	}
@@ -70,10 +70,10 @@ static void handle_default_status(struct bt_mesh_model *mod,
 	}
 
 	struct bt_mesh_plvl_cli *cli = mod->user_data;
-	u16_t default_lvl = net_buf_simple_pull_le16(buf);
+	uint16_t default_lvl = net_buf_simple_pull_le16(buf);
 
-	if (model_ack_match(&cli->ack_ctx, BT_MESH_PLVL_OP_LEVEL_STATUS, ctx)) {
-		u16_t *rsp = cli->ack_ctx.user_data;
+	if (model_ack_match(&cli->ack_ctx, BT_MESH_PLVL_OP_DEFAULT_STATUS, ctx)) {
+		uint16_t *rsp = cli->ack_ctx.user_data;
 		*rsp = default_lvl;
 		model_ack_rx(&cli->ack_ctx);
 	}
@@ -98,7 +98,7 @@ static void handle_range_status(struct bt_mesh_model *mod,
 	status.range.min = net_buf_simple_pull_le16(buf);
 	status.range.max = net_buf_simple_pull_le16(buf);
 
-	if (model_ack_match(&cli->ack_ctx, BT_MESH_PLVL_OP_LEVEL_STATUS, ctx)) {
+	if (model_ack_match(&cli->ack_ctx, BT_MESH_PLVL_OP_RANGE_STATUS, ctx)) {
 		struct bt_mesh_plvl_range_status *rsp = cli->ack_ctx.user_data;
 		*rsp = status;
 		model_ack_rx(&cli->ack_ctx);
@@ -126,14 +126,25 @@ static int bt_mesh_lvl_cli_init(struct bt_mesh_model *mod)
 	struct bt_mesh_plvl_cli *cli = mod->user_data;
 
 	cli->model = mod;
-	net_buf_simple_init(mod->pub->msg, 0);
+	cli->pub.msg = &cli->pub_buf;
+	net_buf_simple_init_with_data(&cli->pub_buf, cli->pub_data,
+				      sizeof(cli->pub_data));
 	model_ack_init(&cli->ack_ctx);
 
 	return 0;
 }
 
+static void bt_mesh_lvl_cli_reset(struct bt_mesh_model *mod)
+{
+	struct bt_mesh_plvl_cli *cli = mod->user_data;
+
+	net_buf_simple_reset(mod->pub->msg);
+	model_ack_reset(&cli->ack_ctx);
+}
+
 const struct bt_mesh_model_cb _bt_mesh_plvl_cli_cb = {
 	.init = bt_mesh_lvl_cli_init,
+	.reset = bt_mesh_lvl_cli_reset,
 };
 
 int bt_mesh_plvl_cli_power_get(struct bt_mesh_plvl_cli *cli,
@@ -229,7 +240,7 @@ int bt_mesh_plvl_cli_range_set_unack(struct bt_mesh_plvl_cli *cli,
 }
 
 int bt_mesh_plvl_cli_default_get(struct bt_mesh_plvl_cli *cli,
-				 struct bt_mesh_msg_ctx *ctx, u16_t *rsp)
+				 struct bt_mesh_msg_ctx *ctx, uint16_t *rsp)
 {
 	BT_MESH_MODEL_BUF_DEFINE(buf, BT_MESH_PLVL_OP_DEFAULT_GET,
 				 BT_MESH_PLVL_MSG_LEN_DEFAULT_GET);
@@ -242,7 +253,7 @@ int bt_mesh_plvl_cli_default_get(struct bt_mesh_plvl_cli *cli,
 
 int bt_mesh_plvl_cli_default_set(struct bt_mesh_plvl_cli *cli,
 				 struct bt_mesh_msg_ctx *ctx,
-				 u16_t default_power, u16_t *rsp)
+				 uint16_t default_power, uint16_t *rsp)
 {
 	BT_MESH_MODEL_BUF_DEFINE(buf, BT_MESH_PLVL_OP_DEFAULT_SET,
 				 BT_MESH_PLVL_MSG_LEN_DEFAULT_SET);
@@ -256,7 +267,7 @@ int bt_mesh_plvl_cli_default_set(struct bt_mesh_plvl_cli *cli,
 
 int bt_mesh_plvl_cli_default_set_unack(struct bt_mesh_plvl_cli *cli,
 				       struct bt_mesh_msg_ctx *ctx,
-				       u16_t default_power)
+				       uint16_t default_power)
 {
 	BT_MESH_MODEL_BUF_DEFINE(buf, BT_MESH_PLVL_OP_DEFAULT_SET_UNACK,
 				 BT_MESH_PLVL_MSG_LEN_DEFAULT_SET);
@@ -267,7 +278,7 @@ int bt_mesh_plvl_cli_default_set_unack(struct bt_mesh_plvl_cli *cli,
 }
 
 int bt_mesh_plvl_cli_last_get(struct bt_mesh_plvl_cli *cli,
-			      struct bt_mesh_msg_ctx *ctx, u16_t *rsp)
+			      struct bt_mesh_msg_ctx *ctx, uint16_t *rsp)
 {
 	BT_MESH_MODEL_BUF_DEFINE(buf, BT_MESH_PLVL_OP_LAST_GET,
 				 BT_MESH_PLVL_MSG_LEN_LAST_GET);

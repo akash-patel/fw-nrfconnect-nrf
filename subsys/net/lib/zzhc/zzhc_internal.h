@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #ifndef ZZHC_INTERNAL_H_
@@ -22,10 +22,10 @@
 extern "C" {
 #endif
 
-#include <at_cmd.h>
-#include <at_notif.h>
+#include <modem/at_cmd.h>
+#include <modem/at_notif.h>
 #include <settings/settings.h>
-#include <lte_lc.h>
+#include <modem/lte_lc.h>
 
 #define AT_RESPONSE_LEN   64        /** Length of AT-command response */
 #define HTTP_PKT_LEN      512       /** Length of HTTP request packet */
@@ -87,7 +87,7 @@ struct zzhc {
 #define zzhc_sem_post(sem)                      k_sem_give(sem)
 
 /**@brief Sleep (seconds). */
-#define zzhc_sleep(t)                           k_sleep(t * 1000)
+#define zzhc_sleep(t)                           k_sleep(K_SECONDS(t))
 
 /**
  * @brief Get pointer to the current thread.
@@ -110,17 +110,6 @@ struct zzhc {
 
 /**@brief Free. */
 #define zzhc_free(ptr)                          k_free(ptr)
-
-/**@brief Read chip-revision from FICR.
- *
- * This function request reading of FICR register 0x00FF0134.
- *
- * @param i   Pointer to 4-byte integer buffer for storage of FICR value.
- *
- * @return 0 on success, non-zero on failure.
- *
- */
-int zzhc_read_chip_rev(u32_t *i);
 
 /**@brief Save ICCID to file.
  *

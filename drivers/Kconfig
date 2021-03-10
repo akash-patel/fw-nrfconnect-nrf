@@ -1,27 +1,25 @@
 #
-# Copyright (c) 2018-2019 Nordic Semiconductor ASA
+# Copyright (c) 2018-2020 Nordic Semiconductor ASA
 #
-# SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
 menu "Device Drivers"
 
-rsource "adp536x/Kconfig"
-rsource "at_cmd/Kconfig"
-
-rsource "gps_sim/Kconfig"
+rsource "bluetooth/Kconfig"
 rsource "entropy/Kconfig"
 rsource "hw_cc310/Kconfig"
-rsource "nrf9160_gps/Kconfig"
-rsource "lte_link_control/Kconfig"
 rsource "net/Kconfig"
 rsource "sensor/Kconfig"
-rsource "st25r3911b/Kconfig"
-rsource "fprotect/Kconfig"
-rsource "flash_patch/Kconfig"
+rsource "gps/Kconfig"
+rsource "serial/Kconfig"
 
-if BT_LL_NRFXLIB
-rsource "bt_ll_nrfxlib/Kconfig"
+if BT_LL_SOFTDEVICE
+rsource "bt_ll_softdevice/Kconfig"
+endif
+
+if MPSL
+rsource "mpsl/Kconfig"
 endif
 
 endmenu

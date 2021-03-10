@@ -1,46 +1,55 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <zephyr.h>
 #include <stdio.h>
-#include <bsd.h>
-#include <lte_lc.h>
-#include <at_cmd.h>
-#include <at_notif.h>
+#include <nrf_modem.h>
+#include <modem/lte_lc.h>
+#include <modem/at_cmd.h>
+#include <modem/at_notif.h>
 #include <net/mqtt.h>
 #include <net/socket.h>
-#include <net/bsdlib.h>
+#include <modem/nrf_modem_lib.h>
+#include <net/aws_jobs.h>
 #include <net/aws_fota.h>
 #include <dfu/mcuboot.h>
-#include <misc/reboot.h>
+#include <power/reboot.h>
+#include <random/rand32.h>
+
+BUILD_ASSERT(!IS_ENABLED(CONFIG_LTE_AUTO_INIT_AND_CONNECT),
+			"This sample does not support auto init and connect");
 
 #if defined(CONFIG_USE_NRF_CLOUD)
 #define NRF_CLOUD_SECURITY_TAG 16842753
 #endif
 
-#if defined(CONFIG_BSD_LIBRARY)
-#include "nrf_inbuilt_key.h"
-#endif
+#define MQTT_KEEPALIVE (CONFIG_MQTT_KEEPALIVE * MSEC_PER_SEC)
 
 #if defined(CONFIG_PROVISION_CERTIFICATES)
 #include "certificates.h"
+#if defined(CONFIG_MODEM_KEY_MGMT)
+#include <modem/modem_key_mgmt.h>
+#endif
 #endif
 
 #if !defined(CONFIG_CLOUD_CLIENT_ID)
+/* Define the length of the IMEI AT COMMAND response buffer */
+#define CGSN_RESP_LEN 19
 #define IMEI_LEN 15
-#define CLIENT_ID_LEN (IMEI_LEN + 4)
+#define CLIENT_ID_LEN (sizeof(CONFIG_NRF_CLOUD_CLIENT_ID_PREFIX) + IMEI_LEN)
 #else
-#define CLIENT_ID_LEN (sizeof(CONFIG_CLOUD_CLIENT_ID) - 1)
+#define CLIENT_ID_LEN sizeof(CONFIG_CLOUD_CLIENT_ID)
 #endif
-static u8_t client_id_buf[CLIENT_ID_LEN+1];
+static uint8_t client_id_buf[CLIENT_ID_LEN];
+static uint8_t current_job_id[AWS_JOBS_JOB_ID_MAX_LEN];
 
 /* Buffers for MQTT client. */
-static u8_t rx_buffer[CONFIG_MQTT_MESSAGE_BUFFER_SIZE];
-static u8_t tx_buffer[CONFIG_MQTT_MESSAGE_BUFFER_SIZE];
-static u8_t payload_buf[CONFIG_MQTT_PAYLOAD_BUFFER_SIZE];
+static uint8_t rx_buffer[CONFIG_MQTT_MESSAGE_BUFFER_SIZE];
+static uint8_t tx_buffer[CONFIG_MQTT_MESSAGE_BUFFER_SIZE];
+static uint8_t payload_buf[CONFIG_MQTT_PAYLOAD_BUFFER_SIZE];
 
 /* MQTT Broker details. */
 static struct sockaddr_storage broker_storage;
@@ -51,14 +60,17 @@ static struct pollfd fds;
 /* Set to true when application should teardown and reboot */
 static bool do_reboot;
 
-#if defined(CONFIG_BSD_LIBRARY)
-/**@brief Recoverable BSD library error. */
-void bsd_recoverable_error_handler(uint32_t err)
+/* Set to true when application should reconnect the LTE link*/
+static bool link_offline;
+
+#if defined(CONFIG_NRF_MODEM_LIB)
+/**@brief Recoverable modem library error. */
+void nrf_modem_recoverable_error_handler(uint32_t err)
 {
-	printk("bsdlib recoverable error: %u\n", err);
+	printk("Modem library recoverable error: %u\n", err);
 }
 
-#endif /* defined(CONFIG_BSD_LIBRARY) */
+#endif /* defined(CONFIG_NRF_MODEM_LIB) */
 
 #if !defined(CONFIG_USE_NRF_CLOUD)
 /* Topic for updating shadow topic with version number */
@@ -71,14 +83,14 @@ static int update_device_shadow_version(struct mqtt_client *const client)
 {
 	struct mqtt_publish_param param;
 	char update_delta_topic[strlen(AWS) + strlen("/shadow/update") +
-				CLIENT_ID_LEN + 1];
-	u8_t shadow_update_payload[CONFIG_DEVICE_SHADOW_PAYLOAD_SIZE];
+				sizeof(client_id_buf)];
+	uint8_t shadow_update_payload[CONFIG_DEVICE_SHADOW_PAYLOAD_SIZE];
 
 	int ret = snprintf(update_delta_topic,
 			   sizeof(update_delta_topic),
 			   UPDATE_DELTA_TOPIC,
 			   client->client_id.utf8);
-	u32_t update_delta_topic_len = ret;
+	uint32_t update_delta_topic_len = ret;
 
 	if (ret >= sizeof(update_delta_topic)) {
 		return -ENOMEM;
@@ -90,7 +102,7 @@ static int update_device_shadow_version(struct mqtt_client *const client)
 		       sizeof(shadow_update_payload),
 		       SHADOW_STATE_UPDATE,
 		       CONFIG_APP_VERSION);
-	u32_t shadow_update_payload_len = ret;
+	uint32_t shadow_update_payload_len = ret;
 
 	if (ret >= sizeof(shadow_update_payload)) {
 		return -ENOMEM;
@@ -112,7 +124,7 @@ static int update_device_shadow_version(struct mqtt_client *const client)
 #endif /* !defined(CONFIG_USE_NRF_CLOUD) */
 
 /**@brief Function to print strings without null-termination. */
-static void data_print(u8_t *prefix, u8_t *data, size_t len)
+static void data_print(uint8_t *prefix, uint8_t *data, size_t len)
 {
 	char buf[len + 1];
 
@@ -124,11 +136,11 @@ static void data_print(u8_t *prefix, u8_t *data, size_t len)
 /**@brief Function to read the published payload.
  */
 static int publish_get_payload(struct mqtt_client *c,
-			       u8_t *write_buf,
+			       uint8_t *write_buf,
 			       size_t length)
 {
-	u8_t *buf = write_buf;
-	u8_t *end = buf + length;
+	uint8_t *buf = write_buf;
+	uint8_t *end = buf + length;
 
 	if (length > sizeof(payload_buf)) {
 		return -EMSGSIZE;
@@ -153,7 +165,7 @@ void mqtt_evt_handler(struct mqtt_client * const c,
 	int err;
 
 	err = aws_fota_mqtt_evt_handler(c, evt);
-	if (err > 0) {
+	if (err == 0) {
 		/* Event handled by FOTA library so we can skip it */
 		return;
 	} else if (err < 0) {
@@ -317,7 +329,7 @@ static void broker_init(const char *hostname)
 #define MAX_OF_2 MAX(sizeof(CLOUD_CA_CERTIFICATE),\
 		     sizeof(CLOUD_CLIENT_PRIVATE_KEY))
 #define MAX_LEN MAX(MAX_OF_2, sizeof(CLOUD_CLIENT_PUBLIC_CERTIFICATE))
-static u8_t certificates[][MAX_LEN] = {{CLOUD_CA_CERTIFICATE},
+static uint8_t certificates[][MAX_LEN] = {{CLOUD_CA_CERTIFICATE},
 				       {CLOUD_CLIENT_PRIVATE_KEY},
 				       {CLOUD_CLIENT_PUBLIC_CERTIFICATE} };
 static const size_t cert_len[] = {
@@ -336,44 +348,46 @@ static int provision_certificates(void)
 		"\n");
 	printk("************************* WARNING *************************\n");
 	nrf_sec_tag_t sec_tag = CONFIG_CLOUD_CERT_SEC_TAG;
-	nrf_key_mgnt_cred_type_t cred[] = {
-		NRF_KEY_MGMT_CRED_TYPE_CA_CHAIN,
-		NRF_KEY_MGMT_CRED_TYPE_PRIVATE_CERT,
-		NRF_KEY_MGMT_CRED_TYPE_PUBLIC_CERT,
+	enum modem_key_mgmt_cred_type cred[] = {
+		MODEM_KEY_MGMT_CRED_TYPE_CA_CHAIN,
+		MODEM_KEY_MGMT_CRED_TYPE_PRIVATE_CERT,
+		MODEM_KEY_MGMT_CRED_TYPE_PUBLIC_CERT,
 	};
 
 	/* Delete certificates */
-	for (nrf_key_mgnt_cred_type_t type = 0; type < 3; type++) {
-		err = nrf_inbuilt_key_delete(sec_tag, type);
-		printk("nrf_inbuilt_key_delete(%u, %d) => result=%d\n",
+	for (enum modem_key_mgmt_cred_type type = 0; type < 3; type++) {
+		err = modem_key_mgmt_delete(sec_tag, type);
+		printk("modem_key_mgmt_delete(%u, %d) => result=%d\n",
 				sec_tag, type, err);
 	}
 
 	/* Write certificates */
-	for (nrf_key_mgnt_cred_type_t type = 0; type < 3; type++) {
-		err = nrf_inbuilt_key_write(sec_tag, cred[type],
+	for (enum modem_key_mgmt_cred_type type = 0; type < 3; type++) {
+		err = modem_key_mgmt_write(sec_tag, cred[type],
 				certificates[type], cert_len[type]);
-		printk("nrf_inbuilt_key_write => result=%d\n", err);
+		printk("modem_key_mgmt_write => result=%d\n", err);
 	}
 	return 0;
 }
 #endif
 
-static int client_id_get(char *id_buf)
+static int client_id_get(char *id_buf, size_t len)
 {
 #if !defined(CONFIG_CLOUD_CLIENT_ID)
 	enum at_cmd_state at_state;
-	char imei_buf[IMEI_LEN + 5];
-	int err = at_cmd_write("AT+CGSN", imei_buf, (IMEI_LEN + 5), &at_state);
+	char imei_buf[CGSN_RESP_LEN];
+	int err = at_cmd_write("AT+CGSN", imei_buf, sizeof(imei_buf),
+				&at_state);
 
 	if (err) {
 		printk("Error when trying to do at_cmd_write: %d, at_state: %d",
 			err, at_state);
+		return err;
 	}
-
-	snprintf(id_buf, CLIENT_ID_LEN + 1, "nrf-%s", imei_buf);
+	snprintf(id_buf, len, "%s%.*s", CONFIG_NRF_CLOUD_CLIENT_ID_PREFIX,
+		 IMEI_LEN, imei_buf);
 #else
-	memcpy(id_buf, CONFIG_CLOUD_CLIENT_ID, CLIENT_ID_LEN + 1);
+	memcpy(id_buf, CONFIG_CLOUD_CLIENT_ID, len);
 #endif /* !defined(NRF_CLOUD_CLIENT_ID) */
 	return 0;
 }
@@ -383,12 +397,12 @@ static int client_init(struct mqtt_client *client, char *hostname)
 {
 	mqtt_client_init(client);
 	broker_init(hostname);
-	int ret = client_id_get(client_id_buf);
+	int ret = client_id_get(client_id_buf, sizeof(client_id_buf));
 
-	printk("client_id: %s\n", client_id_buf);
 	if (ret != 0) {
 		return ret;
 	}
+	printk("client_id: %s\n", client_id_buf);
 
 	/* MQTT client configuration */
 	client->broker = &broker_storage;
@@ -435,34 +449,70 @@ static int fds_init(struct mqtt_client *c)
 	return 0;
 }
 
-/**@brief Configures modem to provide LTE link.
- *
- * Blocks until link is successfully established.
- */
-static void modem_configure(void)
+/**@brief Configures AT Command interface to the modem link. */
+static void at_configure(void)
 {
-#if defined(CONFIG_LTE_LINK_CONTROL)
-	BUILD_ASSERT_MSG(!IS_ENABLED(CONFIG_LTE_AUTO_INIT_AND_CONNECT),
-			"This sample does not support auto init and connect");
 	int err;
 
 	err = at_notif_init();
 	__ASSERT(err == 0, "AT Notify could not be initialized.");
 	err = at_cmd_init();
 	__ASSERT(err == 0, "AT CMD could not be established.");
-	printk("LTE Link Connecting ...\n");
-	err = lte_lc_init_and_connect();
-	__ASSERT(err == 0, "LTE link could not be established.");
-	printk("LTE Link Connected!\n");
-#endif
 }
 
-static void aws_fota_cb_handler(enum aws_fota_evt_id evt)
+static void aws_fota_cb_handler(struct aws_fota_event *fota_evt)
 {
-	switch (evt) {
+	int err;
+
+	if (fota_evt == NULL) {
+		return;
+	}
+
+	switch (fota_evt->id) {
+	case AWS_FOTA_EVT_START:
+		if (aws_fota_get_job_id(current_job_id,
+					sizeof(current_job_id)) <= 0) {
+			snprintf(current_job_id, sizeof(current_job_id), "N/A");
+		}
+		printk("AWS_FOTA_EVT_START, job id = %s\n", current_job_id);
+		break;
+
+	case AWS_FOTA_EVT_DL_PROGRESS:
+		/* CONFIG_FOTA_DOWNLOAD_PROGRESS_EVT must be enabled */
+		/* to receive progress events */
+		printk("AWS_FOTA_EVT_DL_PROGRESS, %d%% downloaded\n",
+			fota_evt->dl.progress);
+		break;
+
 	case AWS_FOTA_EVT_DONE:
-		printk("AWS_FOTA_EVT_DONE, rebooting to apply update.\n");
+		printk("AWS_FOTA_EVT_DONE, rebooting to apply update\n");
 		do_reboot = true;
+		break;
+
+	case AWS_FOTA_EVT_ERASE_PENDING:
+		printk("AWS_FOTA_EVT_ERASE_PENDING, reboot or disconnect the "
+		       "LTE link\n");
+		err = lte_lc_offline();
+		if (err) {
+			printk("Error turning off the LTE link\n");
+			break;
+		}
+		link_offline = true;
+		break;
+
+	case AWS_FOTA_EVT_ERASE_DONE:
+		printk("AWS_FOTA_EVT_ERASE_DONE\n");
+
+		if (link_offline) {
+			printk("Reconnecting the LTE link\n");
+
+			err = lte_lc_connect();
+			if (err) {
+				printk("Error reconnecting the LTE link\n");
+				break;
+			}
+			link_offline = false;
+		}
 		break;
 
 	case AWS_FOTA_EVT_ERROR:
@@ -479,8 +529,8 @@ void main(void)
 	struct mqtt_client client;
 
 	printk("MQTT AWS Jobs FOTA Sample, version: %s\n", CONFIG_APP_VERSION);
-	printk("Initializing bsdlib\n");
-	err = bsdlib_init();
+	printk("Initializing modem library\n");
+	err = nrf_modem_lib_init(NORMAL_MODE);
 	switch (err) {
 	case MODEM_DFU_RESULT_OK:
 		printk("Modem firmware update successful!\n");
@@ -498,22 +548,26 @@ void main(void)
 		printk("Fatal error.\n");
 		break;
 	case -1:
-		printk("Could not initialize bsdlib.\n");
+		printk("Could not initialize modem library.\n");
 		printk("Fatal error.\n");
 		return;
 	default:
 		break;
 	}
-	printk("Initialized bsdlib\n");
+	printk("Initialized modem library\n");
 
+	at_configure();
 #if defined(CONFIG_PROVISION_CERTIFICATES)
 	provision_certificates();
 #endif /* CONFIG_PROVISION_CERTIFICATES */
-	modem_configure();
+	printk("LTE Link Connecting ...\n");
+	err = lte_lc_init_and_connect();
+	__ASSERT(err == 0, "LTE link could not be established.");
+	printk("LTE Link Connected!\n");
 
 	client_init(&client, CONFIG_MQTT_BROKER_HOSTNAME);
 
-	err = aws_fota_init(&client, CONFIG_APP_VERSION, aws_fota_cb_handler);
+	err = aws_fota_init(&client, aws_fota_cb_handler);
 	if (err != 0) {
 		printk("ERROR: aws_fota_init %d\n", err);
 		return;
@@ -537,14 +591,14 @@ void main(void)
 	boot_write_img_confirmed();
 
 	while (1) {
-		err = poll(&fds, 1, K_SECONDS(CONFIG_MQTT_KEEPALIVE));
+		err = poll(&fds, 1, MQTT_KEEPALIVE);
 		if (err < 0) {
 			printk("ERROR: poll %d\n", errno);
 			break;
 		}
 
 		err = mqtt_live(&client);
-		if (err != 0) {
+		if ((err != 0) && (err != -EAGAIN)) {
 			printk("ERROR: mqtt_live %d\n", err);
 			break;
 		}

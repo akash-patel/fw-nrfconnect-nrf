@@ -3,7 +3,11 @@
 Bluetooth: LLPM
 ###############
 
-The Bluetooth Low Latency Packet Mode (LLPM) sample uses the :ref:`latency_readme` and the :ref:`latency_c_readme` to showcase the LLPM proprietary Bluetooth extension from Nordic Semiconductor.
+.. contents::
+   :local:
+   :depth: 2
+
+The Bluetooth Low Latency Packet Mode (LLPM) sample uses the :ref:`latency_readme` and the :ref:`latency_client_readme` to showcase the LLPM proprietary Bluetooth extension from Nordic Semiconductor.
 You can use it to determine the transmission latency of LLPM-enabled connections, or to compare with different connection parameters and check their influence on the results.
 
 
@@ -17,19 +21,19 @@ See the following subsections for a description of the key LLPM elements.
 
 LLPM connection interval (1 ms)
    The connection interval defines how often the devices must listen on the radio.
-   The LLPM introduces the possibility to reduce the connection interval below what is supported in BLE.
+   The LLPM introduces the possibility to reduce the connection interval below what is supported in Bluetooth LE.
    The lowest supported connection interval is 1 ms for one link.
 
 Physical layer (PHY)
    Starting with Bluetooth 5, the over-the-air data rate in Bluetooth Low Energy supports 2 Ms/s (mega symbol per second), which allows for faster transmission.
    The LLPM connection interval is only supported on *LE 2M PHY*.
-   Otherwise, the BLE controller will deny the request command.
+   Otherwise, the SoftDevice Controller will deny the request command.
 
 QoS connection event reports
    When reports are enabled, one report will be generated on every connection event.
    The report gives information about the quality of service of the connection event.
    The values in the report are used to describe the quality of links.
-   For parameter descriptions, see :cpp:enum:`hci_vs_evt_qos_conn_event_report_t` (in :file:`ble_controller_hci_vs.h`).
+   For parameter descriptions, see :c:type:`sdc_hci_vs_subevent_qos_conn_event_report_t` (in :file:`sdc_hci_vs.h`).
 
 Transmission latency
    The definition of the latency used in this example counts the time interval from the sender's application to the GATT service of the receiver.
@@ -53,7 +57,7 @@ GATT Latency Service
      - BT_UUID_LATENCY_CHAR
      - BT_GATT_CHRC_WRITE, BT_GATT_PERM_WRITE
 
-This sample transmits data between two boards to measure the transmission latency in between.
+This sample transmits data between two development kits to measure the transmission latency in between.
 One of the devices is connected as a *master* and another is connected as a *slave*.
 The performance is evaluated with the transmission latency dividing the estimated round-trip time in half (RTT / 2).
 
@@ -75,14 +79,16 @@ By default, the following values are used to demonstrates the interaction of the
 Requirements
 ************
 
-* Two of the following nRF52-series development kit boards:
+The sample supports the following development kits:
 
-  * |nRF52DK|
-  * |nRF52840DK|
-  * Other boards running BLE Controller variants that support LLPM (see :ref:`nrfxlib:ble_controller` Proprietary feature support)
+.. table-from-rows:: /includes/sample_board_rows.txt
+   :header: heading
+   :rows: nrf5340dk_nrf5340_cpuapp_and_cpuappns,nrf52840dk_nrf52840, nrf52833dk_nrf52833, nrf52dk_nrf52832
 
-  You can mix different boards.
-* Connection to a computer with a serial terminal for each of the boards.
+The sample also supports other development kits running SoftDevice Controller variants that support LLPM (see :ref:`nrfxlib:softdevice_controller` Proprietary feature support).
+You can use any two of the development kits mentioned above and mix different development kits.
+
+Additionally, the sample requires a connection to a computer with a serial terminal for each of the development kits.
 
 
 Building and running
@@ -95,12 +101,12 @@ Building and running
 Testing
 =======
 
-After programming the sample to both boards, test it by performing the following steps:
+After programming the sample to both development kits, test it by performing the following steps:
 
-1. Connect to both boards with a terminal emulator (for example, PuTTY).
+1. Connect to both kits with a terminal emulator (for example, PuTTY).
    See :ref:`putty` for the required settings.
-#. Reset both boards.
-#. Observe that the boards establish a connection.
+#. Reset both kits.
+#. Observe that the kits establish a connection.
    When they are connected, one of them serves as *master* and the other one as *slave*.
 
    - The master outputs the following information::
@@ -115,7 +121,7 @@ After programming the sample to both boards, test it by performing the following
 #. Observe the terminal connected to the slave. The latency measurements are printed in the terminal.
    The latency is expected to be shorter than the default connection interval::
 
-       Transmission Latency: 80917 (us)
+       Transmission Latency: 80917 (us), CRC mismatches: 0
 
 #. Press a key in the terminal that is connected to the master.
 #. Observe the connection gets updated to LLPM connection interval (1 ms) on both sides::
@@ -125,13 +131,13 @@ After programming the sample to both boards, test it by performing the following
 #. Observe the terminal connected to the slave.
    The measured latency on the slave becomes approximate 1 ms::
 
-       Transmission Latency: 1098 (us)
+       Transmission Latency: 1098 (us), CRC mismatches: 0
 
 #. Press a key in the terminal that is connected to the master.
 #. Observe the terminal connected to the master.
    The measured latency on the master remains approximate 1 ms::
 
-       Transmission Latency: 1235 (us)
+       Transmission Latency: 1235 (us), CRC mismatches: 0
 
 .. msc::
    hscale = "1.3";
@@ -179,40 +185,34 @@ The result should look similar to the following output.
    Filters matched. Address: f9:3c:9c:d1:f6:07 (random) connectable: 1
    Connected as master
    Conn. interval is 80 units (1.25 ms/unit)
-   QoS conn event reports: channel index 0x1f, CRC errors 0x00
    Service discovery completed
    Press any key to set LLPM short connection interval (1 ms)
-   QoS conn event reports: channel index 0x07, CRC errors 0x00
    Press any key to start measuring transmission latency
    Connection interval updated: LLPM (1 ms)
-   Transmission Latency: 1235 (us)
-   Transmission Latency: 1007 (us)
-   QoS conn event reports: channel index 0x22, CRC errors 0x00
-   Transmission Latency: 1434 (us)
-   Transmission Latency: 1312 (us)
-   Transmission Latency: 1220 (us)
-   Transmission Latency: 991 (us)
-   Transmission Latency: 1419 (us)
-   QoS conn event reports: channel index 0x1a, CRC errors 0x00
-   Transmission Latency: 1281 (us)
-   Transmission Latency: 1052 (us)
-   Transmission Latency: 991 (us)
-   Transmission Latency: 1403 (us)
-   Transmission Latency: 1296 (us)
-   Transmission Latency: 1052 (us)
-   Transmission Latency: 976 (us)
-   Transmission Latency: 1358 (us)
-   Transmission Latency: 1281 (us)
-   Transmission Latency: 1052 (us)
-   Transmission Latency: 976 (us)
-   QoS conn event reports: channel index 0x1d, CRC errors 0x00
-   Transmission Latency: 1358 (us)
-   Transmission Latency: 1281 (us)
-   Transmission Latency: 1052 (us)
-   Transmission Latency: 976 (us)
-   Transmission Latency: 1358 (us)
-   QoS conn event reports: channel index 0x10, CRC errors 0x00
-   Transmission Latency: 1281 (us)
+   Transmission Latency: 1235 (us), CRC mismatches: 0
+   Transmission Latency: 1007 (us), CRC mismatches: 0
+   Transmission Latency: 1434 (us), CRC mismatches: 0
+   Transmission Latency: 1312 (us), CRC mismatches: 0
+   Transmission Latency: 1220 (us), CRC mismatches: 0
+   Transmission Latency: 991 (us), CRC mismatches: 0
+   Transmission Latency: 1419 (us), CRC mismatches: 0
+   Transmission Latency: 1281 (us), CRC mismatches: 0
+   Transmission Latency: 1052 (us), CRC mismatches: 0
+   Transmission Latency: 991 (us), CRC mismatches: 0
+   Transmission Latency: 1403 (us), CRC mismatches: 0
+   Transmission Latency: 1296 (us), CRC mismatches: 0
+   Transmission Latency: 1052 (us), CRC mismatches: 0
+   Transmission Latency: 976 (us), CRC mismatches: 0
+   Transmission Latency: 1358 (us), CRC mismatches: 0
+   Transmission Latency: 1281 (us), CRC mismatches: 0
+   Transmission Latency: 1052 (us), CRC mismatches: 0
+   Transmission Latency: 976 (us), CRC mismatches: 0
+   Transmission Latency: 1358 (us), CRC mismatches: 0
+   Transmission Latency: 1281 (us), CRC mismatches: 0
+   Transmission Latency: 1052 (us), CRC mismatches: 0
+   Transmission Latency: 976 (us), CRC mismatches: 0
+   Transmission Latency: 1358 (us), CRC mismatches: 0
+   Transmission Latency: 1281 (us), CRC mismatches: 0
 
 - For the slave::
 
@@ -232,35 +232,32 @@ The result should look similar to the following output.
    Filter not match. Address: 5c:f2:70:c2:3f:9f (random) connectable: 1
    Connected as slave
    Conn. interval is 80 units (1.25 ms/unit)
-   QoS conn event reports: channel index 0x1f, CRC errors 0x00
    Service discovery completed
    Press any key to start measuring transmission latency
-   QoS conn event reports: channel index 0x07, CRC errors 0x00
-   Transmission Latency: 80917 (us)
-   Transmission Latency: 80841 (us)
-   Transmission Latency: 80749 (us)
-   Transmission Latency: 80673 (us)
-   Transmission Latency: 80596 (us)
-   Transmission Latency: 80505 (us)
-   Transmission Latency: 80429 (us)
-   Transmission Latency: 80337 (us)
-   Transmission Latency: 80261 (us)
-   Transmission Latency: 80184 (us)
-   Transmission Latency: 80093 (us)
-   Transmission Latency: 80017 (us)
-   Transmission Latency: 79940 (us)
-   Transmission Latency: 79849 (us)
+   Transmission Latency: 80917 (us), CRC mismatches: 0
+   Transmission Latency: 80841 (us), CRC mismatches: 0
+   Transmission Latency: 80749 (us), CRC mismatches: 0
+   Transmission Latency: 80673 (us), CRC mismatches: 0
+   Transmission Latency: 80596 (us), CRC mismatches: 0
+   Transmission Latency: 80505 (us), CRC mismatches: 0
+   Transmission Latency: 80429 (us), CRC mismatches: 0
+   Transmission Latency: 80337 (us), CRC mismatches: 0
+   Transmission Latency: 80261 (us), CRC mismatches: 0
+   Transmission Latency: 80184 (us), CRC mismatches: 0
+   Transmission Latency: 80093 (us), CRC mismatches: 0
+   Transmission Latency: 80017 (us), CRC mismatches: 0
+   Transmission Latency: 79940 (us), CRC mismatches: 0
+   Transmission Latency: 79849 (us), CRC mismatches: 0
    Connection interval updated: LLPM (1 ms)
-   Transmission Latency: 81604 (us)
-   Transmission Latency: 30181 (us)
-   Transmission Latency: 1098 (us)
-   QoS conn event reports: channel index 0x22, CRC errors 0x00
-   Transmission Latency: 1129 (us)
-   Transmission Latency: 1037 (us)
-   Transmission Latency: 930 (us)
-   Transmission Latency: 1312 (us)
-   Transmission Latency: 1083 (us)
-   Transmission Latency: 1007 (us)
+   Transmission Latency: 81604 (us), CRC mismatches: 0
+   Transmission Latency: 30181 (us), CRC mismatches: 0
+   Transmission Latency: 1098 (us), CRC mismatches: 0
+   Transmission Latency: 1129 (us), CRC mismatches: 0
+   Transmission Latency: 1037 (us), CRC mismatches: 0
+   Transmission Latency: 930 (us), CRC mismatches: 0
+   Transmission Latency: 1312 (us), CRC mismatches: 0
+   Transmission Latency: 1083 (us), CRC mismatches: 0
+   Transmission Latency: 1007 (us), CRC mismatches: 0
 
 
 Dependencies
@@ -269,20 +266,20 @@ Dependencies
 This sample uses the following |NCS| libraries:
 
 * :ref:`latency_readme`
-* :ref:`latency_c_readme`
+* :ref:`latency_client_readme`
 
-This sample uses the following `nrfxlib`_ libraries:
+This sample uses the following `sdk-nrfxlib`_ libraries:
 
-* :ref:`nrfxlib:ble_controller`
+* :ref:`nrfxlib:softdevice_controller`
 
 In addition, it uses the following Zephyr libraries:
 
 * :file:`include/console.h`
-* :ref:`zephyr:kernel`:
+* :ref:`zephyr:kernel_api`:
 
   * :file:`include/kernel.h`
 
-* :file:`include/misc/printk.h`
+* :file:`include/sys/printk.h`
 * :file:`include/zephyr/types.h`
 * :ref:`zephyr:bluetooth_api`:
 

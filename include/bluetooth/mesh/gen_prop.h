@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 /**
@@ -43,7 +43,16 @@ extern "C" {
 #define BT_MESH_PROP_OP_CLIENT_PROPS_GET BT_MESH_MODEL_OP_1(0x4F)
 #define BT_MESH_PROP_OP_CLIENT_PROPS_STATUS BT_MESH_MODEL_OP_1(0x50)
 
+#ifndef CONFIG_BT_MESH_PROP_MAXSIZE
+#define CONFIG_BT_MESH_PROP_MAXSIZE 0
+#endif
+
+#ifndef CONFIG_BT_MESH_PROP_MAXCOUNT
+#define CONFIG_BT_MESH_PROP_MAXCOUNT 0
+#endif
+
 #define BT_MESH_PROP_MSG_LEN_PROPS_GET 0
+#define BT_MESH_PROP_MSG_LEN_CLIENT_PROPS_GET 2
 #define BT_MESH_PROP_MSG_MINLEN_PROPS_STATUS 0
 #define BT_MESH_PROP_MSG_MAXLEN_PROPS_STATUS (2 * CONFIG_BT_MESH_PROP_MAXCOUNT)
 #define BT_MESH_PROP_MSG_LEN_PROP_GET 2
@@ -54,6 +63,11 @@ extern "C" {
 #define BT_MESH_PROP_MSG_MAXLEN_ADMIN_PROP_SET (3 + CONFIG_BT_MESH_PROP_MAXSIZE)
 #define BT_MESH_PROP_MSG_MINLEN_USER_PROP_SET 2
 #define BT_MESH_PROP_MSG_MAXLEN_USER_PROP_SET (2 + CONFIG_BT_MESH_PROP_MAXSIZE)
+#define BT_MESH_PROP_MSG_MAXLEN(_prop_cnt)                                     \
+	MAX(BT_MESH_MODEL_BUF_LEN(BT_MESH_PROP_OP_MFR_PROP_STATUS,             \
+				  BT_MESH_PROP_MSG_MAXLEN_PROP_STATUS),        \
+	    BT_MESH_MODEL_BUF_LEN(BT_MESH_PROP_OP_MFR_PROPS_STATUS,            \
+				  2 * (_prop_cnt)))
 /** @endcond */
 
 /** Access flags for properties */
@@ -84,7 +98,7 @@ enum bt_mesh_prop_srv_kind {
 /** Property representation. */
 struct bt_mesh_prop {
 	/** Property ID. @sa bt_mesh_property_ids. */
-	u16_t id;
+	uint16_t id;
 	/** User access flags for the property. */
 	enum bt_mesh_prop_access user_access;
 };
@@ -93,7 +107,7 @@ struct bt_mesh_prop {
 struct bt_mesh_prop_val {
 	struct bt_mesh_prop meta; /**< Metadata for this property. */
 	size_t size; /**< Size of the property value. */
-	u8_t *value; /**< Property value. */
+	uint8_t *value; /**< Property value. */
 };
 
 #ifdef __cplusplus

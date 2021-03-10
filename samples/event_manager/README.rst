@@ -3,6 +3,10 @@
 Event Manager
 #############
 
+.. contents::
+   :local:
+   :depth: 2
+
 The Event Manager sample demonstrates the functionality of the :ref:`event_manager` subsystem.
 It uses an event-driven architecture, where different modules communicate through sending and processing events.
 
@@ -24,18 +28,17 @@ Controller (``controller.c``):
 
 Statistics (``stats.c``):
   This module waits for measurement events from the sensor.
-  Every time a measurement event is received, the module calculates simple statistics about one of the measurement values that are transmitted as part of the event and logs them.
+  The module calculates and logs basic statistics about one of the measurement values that are transmitted as part of the event.
 
 
 Requirements
 ************
 
-* One of the following development boards:
+The sample supports the following development kits:
 
-  * |nRF9160DK|
-  * |nRF52840DK|
-  * |nRF52DK|
-  * |nRF51DK|
+.. table-from-rows:: /includes/sample_board_rows.txt
+   :header: heading
+   :rows: nrf9160dk_nrf9160ns, nrf52dk_nrf52832, nrf52840dk_nrf52840
 
 
 Building and running
@@ -48,10 +51,10 @@ Building and running
 Testing
 =======
 
-After programming the sample to your board, test it by performing the following steps:
+After programming the sample to your development kit, test it by performing the following steps:
 
 1. |connect_terminal|
-#. Reset the board.
+#. Reset the kit.
 #. Observe that output similar to the following is logged on UART::
 
       ***** Booting Zephyr OS v1.13.99-ncs1-4741-g1d6219f *****
@@ -80,4 +83,4 @@ This sample uses the following |NCS| subsystems:
 
 In addition, it uses the following Zephyr subsystems:
 
-* :ref:`zephyr:logger`
+* :ref:`zephyr:logging_api`

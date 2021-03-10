@@ -4,9 +4,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-title: BH1749 Digital 16bit Serial Output Type Color Sensor IC
-
-description: >
+description: |
     This is a representation of the BH1749 sensor
 
 compatible: "rohm,bh1749"

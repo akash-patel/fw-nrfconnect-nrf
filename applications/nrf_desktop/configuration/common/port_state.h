@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #ifndef _PORT_STATE_H_
@@ -16,8 +16,8 @@ extern "C" {
 #endif
 
 struct pin_state {
-	u32_t pin;
-	u32_t val;
+	uint32_t pin;
+	uint32_t val;
 };
 
 struct port_state {

@@ -1,17 +1,22 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <zephyr.h>
 #include <stdio.h>
 #include <string.h>
-#include <sensor.h>
+#include <drivers/sensor.h>
 #include "motion.h"
 
+#include <logging/log.h>
+LOG_MODULE_REGISTER(motion, CONFIG_ASSET_TRACKER_LOG_LEVEL);
+
 motion_handler_t handler;
-static struct device *accel_dev;
+static const struct device *accel_dev;
+static struct k_work_q *motion_work_q;
+static struct k_delayed_work motion_work;
 
 #define FLIP_ACCELERATION_THRESHOLD	5.0
 
@@ -35,7 +40,7 @@ static int accelerometer_poll(motion_acceleration_data_t *sensor_data)
 	}
 
 	if (err) {
-		printk("sensor_sample_fetch failed\n");
+		LOG_ERR("sensor_sample_fetch failed");
 		return err;
 	}
 
@@ -43,7 +48,7 @@ static int accelerometer_poll(motion_acceleration_data_t *sensor_data)
 			SENSOR_CHAN_ACCEL_X, &accel_data[0]);
 
 	if (err) {
-		printk("sensor_channel_get failed\n");
+		LOG_ERR("sensor_channel_get failed");
 		return err;
 	}
 
@@ -51,14 +56,14 @@ static int accelerometer_poll(motion_acceleration_data_t *sensor_data)
 			SENSOR_CHAN_ACCEL_Y, &accel_data[1]);
 
 	if (err) {
-		printk("sensor_channel_get failed\n");
+		LOG_ERR("sensor_channel_get failed");
 		return err;
 	}
 	err = sensor_channel_get(accel_dev,
 			SENSOR_CHAN_ACCEL_Z, &accel_data[2]);
 
 	if (err) {
-		printk("sensor_channel_get failed\n");
+		LOG_ERR("sensor_channel_get failed");
 		return err;
 	}
 
@@ -90,13 +95,21 @@ static int get_orientation(motion_orientation_state_t *orientation,
 }
 
 /**@brief Callback for sensor trigger events */
-static void sensor_trigger_handler(struct device *dev,
+static void sensor_trigger_handler(const struct device *dev,
 			struct sensor_trigger *trigger)
 {
 	ARG_UNUSED(dev);
 	ARG_UNUSED(trigger);
 
+	k_delayed_work_submit_to_queue(motion_work_q, &motion_work, K_NO_WAIT);
+}
+
+/**@brief Workqueue handler that runs the callback provided by application.*/
+static void motion_work_q_handler(struct k_work *work)
+{
 	motion_data_t motion_data;
+
+	motion_data.ts = k_uptime_get();
 
 	if (accelerometer_poll(&motion_data.acceleration) == 0) {
 		if (get_orientation(&motion_data.orientation,
@@ -116,8 +129,8 @@ static int accelerometer_init(void)
 	accel_dev = device_get_binding(CONFIG_ACCEL_DEV_NAME);
 
 	if (accel_dev == NULL) {
-		printk("Could not get %s device\n",
-			CONFIG_ACCEL_DEV_NAME);
+		LOG_ERR("Could not get %s device",
+			log_strdup(CONFIG_ACCEL_DEV_NAME));
 		return -ENODEV;
 	}
 
@@ -131,7 +144,7 @@ static int accelerometer_init(void)
 				sensor_trigger_handler);
 
 		if (err) {
-			printk("Unable to set accelerometer trigger\n");
+			LOG_ERR("Unable to set accelerometer trigger");
 			return err;
 		}
 	}
@@ -139,15 +152,19 @@ static int accelerometer_init(void)
 }
 
 /**@brief Initialize motion module. */
-int motion_init_and_start(motion_handler_t motion_handler)
+int motion_init_and_start(struct k_work_q *work_q,
+			  motion_handler_t motion_handler)
 {
-	if (motion_handler == NULL) {
+	if ((work_q == NULL) || (motion_handler == NULL)) {
 		return -EINVAL;
 	}
 
 	int err;
 
+	motion_work_q = work_q;
 	handler = motion_handler;
+
+	k_delayed_work_init(&motion_work, motion_work_q_handler);
 	err = accelerometer_init();
 
 	if (err) {

@@ -1,12 +1,14 @@
 #
 # Copyright (c) 2018 Nordic Semiconductor ASA
 #
-# SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
 menuconfig SECURE_BOOT_CRYPTO
 	bool
 	prompt "Secure Boot Crypto"
+	select FW_INFO
+	select NRF_OBERON
 
 if (SECURE_BOOT_CRYPTO)
 config SB_ECDSA_SECP256R1
@@ -31,6 +33,7 @@ config SB_HASH_LEN
 
 choice SB_CRYPTO_SIG
 	prompt "Firmware verification Algorithm"
+	default SB_CRYPTO_NO_ECDSA_SECP256R1 if !IS_SECURE_BOOTLOADER || SB_VALIDATE_FW_HASH
 	default SB_CRYPTO_CC310_ECDSA_SECP256R1 if HAS_HW_NRF_CC310
 	default SB_CRYPTO_OBERON_ECDSA_SECP256R1
 	help
@@ -38,7 +41,6 @@ choice SB_CRYPTO_SIG
 
 	config SB_CRYPTO_OBERON_ECDSA_SECP256R1
 		bool "Software ECDSA secp256r1"
-		select NRF_OBERON
 		select SB_ECDSA_SECP256R1
 		help
 		  Software implementation of ECDSA with NIST curve secp256r1.
@@ -49,6 +51,17 @@ choice SB_CRYPTO_SIG
 		select SB_ECDSA_SECP256R1
 		help
 		  Hardware implementation of ECDSA with NIST curve secp256r1.
+
+	config SB_CRYPTO_CLIENT_ECDSA_SECP256R1
+		bool "Use another image's ECDSA secp256r1 implementation"
+		select BL_SECP256R1_EXT_API_ATLEAST_REQUIRED
+		select SB_ECDSA_SECP256R1
+		help
+		  Using EXT_APIs from fw_info.
+
+	config SB_CRYPTO_NO_ECDSA_SECP256R1
+		bool "Disable secp256r1 support"
+		select SB_ECDSA_SECP256R1
 
 	#config SB_CRYPTO_OBERON_RSA_2048
 	#	bool #"Software RSA-PSS 2048-bits"
@@ -70,6 +83,7 @@ endchoice
 
 choice SB_CRYPTO_HASH
 	prompt "Hashing Implementation"
+	default SB_CRYPTO_NO_SHA256 if !IS_SECURE_BOOTLOADER
 	default SB_CRYPTO_CC310_SHA256 if HAS_HW_NRF_CC310
 	default SB_CRYPTO_OBERON_SHA256
 	help
@@ -77,7 +91,6 @@ choice SB_CRYPTO_HASH
 
 	config SB_CRYPTO_OBERON_SHA256
 		bool "Software SHA256"
-		select NRF_OBERON
 		select SB_SHA256
 		help
 		  Software implementation of SHA256.
@@ -85,10 +98,20 @@ choice SB_CRYPTO_HASH
 	config SB_CRYPTO_CC310_SHA256
 		bool "Hardware SHA256" if HAS_HW_NRF_CC310
 		select NRF_CC310_BL
-		select NRF_OBERON
 		select SB_SHA256
 		help
 		  Hardware implementation of SHA256.
+
+	config SB_CRYPTO_CLIENT_SHA256
+		bool "Use another image's SHA256 implementation"
+		select BL_SHA256_EXT_API_ATLEAST_REQUIRED
+		select SB_SHA256
+		help
+		  Using EXT_APIs from fw_info.
+
+	config SB_CRYPTO_NO_SHA256
+		bool "Disable SHA256 support"
+		select SB_SHA256
 
 endchoice
 
@@ -99,22 +122,22 @@ config SB_PUBLIC_KEY_HASH_LEN
 	  The length to which public key hashes in the list of Root of Trust
 	  Public Keys are truncated.
 
-endif # SECURE_BOOT_CRYPTO
-
-if SECURE_BOOT_CRYPTO || SECURE_BOOT_CRYPTO_CLIENT
-ABI = BL_ROT_VERIFY
+EXT_API = BL_ROT_VERIFY
+id = 0x1001
 flags = 2
 ver = 1
-source "${ZEPHYR_BASE}/../nrf/subsys/fw_info/Kconfig.template.fw_info_abi"
+source "${ZEPHYR_BASE}/../nrf/subsys/fw_info/Kconfig.template.fw_info_ext_api"
 
-ABI = BL_SHA256
+EXT_API = BL_SHA256
+id = 0x1002
 flags = 0
 ver = 1
-source "${ZEPHYR_BASE}/../nrf/subsys/fw_info/Kconfig.template.fw_info_abi"
+source "${ZEPHYR_BASE}/../nrf/subsys/fw_info/Kconfig.template.fw_info_ext_api"
 
-ABI = BL_SECP256R1
+EXT_API = BL_SECP256R1
+id = 0x1003
 flags = 1
 ver = 1
-source "${ZEPHYR_BASE}/../nrf/subsys/fw_info/Kconfig.template.fw_info_abi"
+source "${ZEPHYR_BASE}/../nrf/subsys/fw_info/Kconfig.template.fw_info_ext_api"
 
-endif # SECURE_BOOT_CRYPTO || SECURE_BOOT_CRYPTO_CLIENT
+endif # SECURE_BOOT_CRYPTO

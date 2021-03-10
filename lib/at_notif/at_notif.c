@@ -1,16 +1,16 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <logging/log.h>
 #include <zephyr.h>
 #include <stdio.h>
 #include <init.h>
-#include <at_cmd.h>
-#include <at_notif.h>
-#include <misc/slist.h>
+#include <modem/at_cmd.h>
+#include <modem/at_notif.h>
+#include <sys/slist.h>
 
 LOG_MODULE_REGISTER(at_notif, CONFIG_AT_NOTIF_LOG_LEVEL);
 
@@ -100,7 +100,7 @@ static int remove_notif_handler(void *ctx, at_notif_handler_t handler)
 }
 
 /**@brief AT command notifications handler. */
-static void notif_dispatch(char *response)
+static void notif_dispatch(const char *response)
 {
 	struct notif_handler *curr, *tmp;
 
@@ -109,8 +109,8 @@ static void notif_dispatch(char *response)
 	/* Dispatch notifications to all registered handlers */
 	LOG_DBG("Dispatching events:");
 	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(&handler_list, curr, tmp, node) {
-		LOG_DBG(" - ctx=0x%08X, handler=0x%08X", (u32_t)curr->ctx,
-			(u32_t)curr->handler);
+		LOG_DBG(" - ctx=0x%08X, handler=0x%08X", (uint32_t)curr->ctx,
+			(uint32_t)curr->handler);
 		curr->handler(curr->ctx, response);
 	}
 	LOG_DBG("Done");
@@ -118,9 +118,18 @@ static void notif_dispatch(char *response)
 	k_mutex_unlock(&list_mtx);
 }
 
-static int module_init(struct device *dev)
+static int module_init(const struct device *dev)
 {
 	ARG_UNUSED(dev);
+
+	static bool initialized;
+
+	if (initialized) {
+		LOG_WRN("Already initialized. Nothing to do");
+		return 0;
+	}
+
+	initialized = true;
 
 	LOG_DBG("Initialization");
 	sys_slist_init(&handler_list);
@@ -137,7 +146,7 @@ int at_notif_register_handler(void *context, at_notif_handler_t handler)
 {
 	if (handler == NULL) {
 		LOG_ERR("Invalid handler (context=0x%08X, handler=0x%08X)",
-			(u32_t)context, (u32_t)handler);
+			(uint32_t)context, (uint32_t)handler);
 		return -EINVAL;
 	}
 	return append_notif_handler(context, handler);
@@ -147,7 +156,7 @@ int at_notif_deregister_handler(void *context, at_notif_handler_t handler)
 {
 	if (handler == NULL) {
 		LOG_ERR("Invalid handler (context=0x%08X, handler=0x%08X)",
-			(u32_t)context, (u32_t)handler);
+			(uint32_t)context, (uint32_t)handler);
 		return -EINVAL;
 	}
 	return remove_notif_handler(context, handler);

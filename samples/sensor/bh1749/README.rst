@@ -3,8 +3,9 @@
 BH1749: Ambient Light Sensor IC
 #####################################################
 
-Description
-***********
+.. contents::
+   :local:
+   :depth: 2
 
 This sample application sets up the BH1749 color sensor to provide 8-bit
 measurement data every time a set threshold value (>50) is reached for the
@@ -12,17 +13,15 @@ RED color channel.
 It also shows how to enable interrupt every time data is ready, instead
 of threshold trigging.
 
-References
-**********
-
- - BH1749NUC-E: https://www.rohm.com/datasheet/BH1749NUC/bh1749nuc-e
 
 Requirements
 ************
 
-* The following development board:
+The sample supports the following nRF9160-based device:
 
-  * |Thingy91|
+.. table-from-rows:: /includes/sample_board_rows.txt
+   :header: heading
+   :rows: thingy91_nrf9160ns
 
 Building and Running
 ********************
@@ -30,7 +29,7 @@ Building and Running
 This project outputs sensor data to the console. It requires a BH1749
 sensor. It should work with any platform featuring a I2C peripheral interface.
 It does not work on QEMU.
-In this example below the PCA20035 board is used.
+The example below uses the Thingy:91.
 
 
 .. |sample path| replace:: :file:`samples/sensor/bh1749`
@@ -40,19 +39,25 @@ In this example below the PCA20035 board is used.
 Sample Output
 =============
 
-.. J-Link RTT Viewer
+.. code-block:: console
 
-    device is 0x20022384, name is BH1749
+    J-Link RTT Viewer
 
-    Threshold trigger
+     device is 0x20022384, name is BH1749
 
-    BH1749 RED: 387
+     Threshold trigger
 
-    BH1749 GREEN: 753
+     BH1749 RED: 387
 
-    BH1749 BLUE: 397
+     BH1749 GREEN: 753
 
-    BH1749 IR: 81
+     BH1749 BLUE: 397
 
-    (continues when trigger level reached)
+     BH1749 IR: 81
 
+     (continues when trigger level reached)
+
+References
+**********
+
+* `BH1749NUC-E`_

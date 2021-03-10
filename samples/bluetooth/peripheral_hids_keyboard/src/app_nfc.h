@@ -1,11 +1,11 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
-#include <nfc/ndef/nfc_ndef_msg.h>
-#include <nfc/ndef/nfc_uri_msg.h>
+#include <nfc/ndef/msg.h>
+#include <nfc/ndef/uri_msg.h>
 #include <nfc/ndef/le_oob_rec.h>
 
 /** @brief Initialize NFC.

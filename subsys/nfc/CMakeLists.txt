@@ -1,7 +1,7 @@
 #
 # Copyright (c) 2018 Nordic Semiconductor
 #
-# SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
 if (CONFIG_NFC_NDEF OR
@@ -14,7 +14,8 @@ add_subdirectory_ifdef(CONFIG_NFC_T2T_PARSER t2t)
 if (CONFIG_NFC_T4T_ISODEP OR
     CONFIG_NFC_T4T_APDU OR
     CONFIG_NFC_T4T_CC_FILE OR
-    CONFIG_NFC_T4T_HL_PROCEDURE)
+    CONFIG_NFC_T4T_HL_PROCEDURE OR
+    CONFIG_NFC_T4T_NDEF_FILE)
 	add_subdirectory(t4t)
 endif()
 
@@ -24,4 +25,7 @@ if (CONFIG_NFC_T2T_NRFXLIB OR
 	add_subdirectory(lib)
 endif()
 
-add_subdirectory_ifdef(CONFIG_NFC_TNEP_TAG tnep)
+if (CONFIG_NFC_TNEP_TAG OR
+    CONFIG_NFC_TNEP_POLLER)
+	add_subdirectory(tnep)
+endif()

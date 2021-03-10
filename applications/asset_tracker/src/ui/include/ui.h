@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 /**@file
@@ -70,11 +70,12 @@ extern "C" {
 #define UI_CLOUD_PAIRING_COLOR		UI_LED_COLOR_YELLOW
 #define UI_ACCEL_CALIBRATING_COLOR	UI_LED_COLOR_PURPLE
 #define UI_LED_ERROR_CLOUD_COLOR	UI_LED_COLOR_RED
-#define UI_LED_ERROR_BSD_REC_COLOR	UI_LED_COLOR_RED
-#define UI_LED_ERROR_BSD_IRREC_COLOR	UI_LED_COLOR_RED
+#define UI_LED_ERROR_MODEM_REC_COLOR	UI_LED_COLOR_RED
+#define UI_LED_ERROR_MODEM_IRREC_COLOR	UI_LED_COLOR_RED
 #define UI_LED_ERROR_LTE_LC_COLOR	UI_LED_COLOR_RED
 #define UI_LED_ERROR_UNKNOWN_COLOR	UI_LED_COLOR_WHITE
 #define UI_LED_GPS_SEARCHING_COLOR	UI_LED_COLOR_PURPLE
+#define UI_LED_GPS_BLOCKED_COLOR	UI_LED_COLOR_BLUE
 #define UI_LED_GPS_FIX_COLOR		UI_LED_COLOR_GREEN
 
 #else
@@ -95,27 +96,29 @@ enum ui_led_pattern {
 	UI_CLOUD_PAIRING,
 	UI_ACCEL_CALIBRATING,
 	UI_LED_ERROR_CLOUD,
-	UI_LED_ERROR_BSD_REC,
-	UI_LED_ERROR_BSD_IRREC,
+	UI_LED_ERROR_MODEM_REC,
+	UI_LED_ERROR_MODEM_IRREC,
 	UI_LED_ERROR_LTE_LC,
 	UI_LED_ERROR_UNKNOWN,
 	UI_LED_GPS_SEARCHING,
+	UI_LED_GPS_BLOCKED,
 	UI_LED_GPS_FIX
 #else /* LED patterns without using PWM. */
-	UI_LTE_DISCONNECTED	= UI_LED_ON(0),
-	UI_LTE_CONNECTING	= UI_LED_BLINK(DK_LED3_MSK),
-	UI_LTE_CONNECTED	= UI_LED_BLINK(DK_LED3_MSK),
-	UI_CLOUD_CONNECTING	= UI_LED_BLINK(DK_LED3_MSK | DK_LED4_MSK),
-	UI_CLOUD_CONNECTED	= UI_LED_ON(DK_LED4_MSK),
-	UI_LED_GPS_SEARCHING	= UI_LED_ON(DK_LED4_MSK),
-	UI_LED_GPS_FIX		= UI_LED_ON(DK_LED4_MSK),
-	UI_CLOUD_PAIRING	= UI_LED_BLINK(DK_LED3_MSK | DK_LED4_MSK),
-	UI_ACCEL_CALIBRATING	= UI_LED_ON(DK_LED1_MSK | DK_LED3_MSK),
-	UI_LED_ERROR_CLOUD	= UI_LED_BLINK(DK_LED1_MSK | DK_LED4_MSK),
-	UI_LED_ERROR_BSD_REC	= UI_LED_BLINK(DK_LED1_MSK | DK_LED3_MSK),
-	UI_LED_ERROR_BSD_IRREC	= UI_LED_BLINK(DK_ALL_LEDS_MSK),
-	UI_LED_ERROR_LTE_LC	= UI_LED_BLINK(DK_LED1_MSK | DK_LED2_MSK),
-	UI_LED_ERROR_UNKNOWN	= UI_LED_ON(DK_ALL_LEDS_MSK)
+	UI_LTE_DISCONNECTED		= UI_LED_ON(0),
+	UI_LTE_CONNECTING		= UI_LED_BLINK(DK_LED3_MSK),
+	UI_LTE_CONNECTED		= UI_LED_ON(DK_LED3_MSK),
+	UI_CLOUD_CONNECTING		= UI_LED_BLINK(DK_LED4_MSK),
+	UI_CLOUD_CONNECTED		= UI_LED_ON(DK_LED4_MSK),
+	UI_LED_GPS_SEARCHING		= UI_LED_ON(DK_LED4_MSK),
+	UI_LED_GPS_FIX			= UI_LED_ON(DK_LED4_MSK),
+	UI_LED_GPS_BLOCKED      	= UI_LED_ON(DK_LED4_MSK),
+	UI_CLOUD_PAIRING		= UI_LED_BLINK(DK_LED3_MSK | DK_LED4_MSK),
+	UI_ACCEL_CALIBRATING		= UI_LED_ON(DK_LED1_MSK | DK_LED3_MSK),
+	UI_LED_ERROR_CLOUD		= UI_LED_BLINK(DK_LED1_MSK | DK_LED4_MSK),
+	UI_LED_ERROR_MODEM_REC		= UI_LED_BLINK(DK_LED1_MSK | DK_LED3_MSK),
+	UI_LED_ERROR_MODEM_IRREC	= UI_LED_BLINK(DK_ALL_LEDS_MSK),
+	UI_LED_ERROR_LTE_LC		= UI_LED_BLINK(DK_LED1_MSK | DK_LED2_MSK),
+	UI_LED_ERROR_UNKNOWN		= UI_LED_ON(DK_ALL_LEDS_MSK)
 #endif /* CONFIG_UI_LED_USE_PWM */
 };
 
@@ -130,7 +133,7 @@ struct ui_evt {
 	enum ui_evt_type type;
 
 	union {
-		u32_t button;
+		uint32_t button;
 	};
 };
 
@@ -165,7 +168,7 @@ void ui_led_set_pattern(enum ui_led_pattern pattern);
  * @param led LED number to be controlled.
  * @param value 0 turns the LED off, a non-zero value turns the LED on.
  */
-void ui_led_set_state(u32_t led, u8_t value);
+void ui_led_set_state(uint32_t led, uint8_t value);
 
 /**
  * @brief Gets the LED pattern.
@@ -183,7 +186,7 @@ enum ui_led_pattern ui_led_get_pattern(void);
  *
  * @return 0 on success or negative error value on failure.
  */
-int ui_led_set_color(u8_t red, u8_t green, u8_t blue);
+int ui_led_set_color(uint8_t red, uint8_t green, uint8_t blue);
 
 /**
  * @brief Get the state of a button.
@@ -192,7 +195,7 @@ int ui_led_set_color(u8_t red, u8_t green, u8_t blue);
  *
  * @return 1 if button is active, 0 if it's inactive.
  */
-bool ui_button_is_active(u32_t button);
+bool ui_button_is_active(uint32_t button);
 
 /**
  * @brief Set the buzzer frequency.
@@ -205,7 +208,7 @@ bool ui_button_is_active(u32_t button);
  *
  * @return 0 on success or negative error value on failure.
  */
-int ui_buzzer_set_frequency(u32_t frequency, u8_t intensity);
+int ui_buzzer_set_frequency(uint32_t frequency, uint8_t intensity);
 
 /**
  * @brief Write value to pin controlling NMOS transistor.
@@ -215,17 +218,18 @@ int ui_buzzer_set_frequency(u32_t frequency, u8_t intensity);
  *
  * @return 0 on success or negative error value on failure.
  */
-int ui_nmos_write(size_t nmos_idx, u8_t value);
+int ui_nmos_write(size_t nmos_idx, uint8_t value);
 
 /**
  * @brief Control NMOS with PWM signal.
  *
+ * @param nmos_idx	NMOS to control.
  * @param period	PWM signal period in microseconds.
  * @param pulse	PWM signal Pulse in microseconds.
  *
  * @return 0 on success or negative error value on failure.
  */
-int ui_nmos_pwm_set(size_t nmos_idx, u32_t period, u32_t pulse);
+int ui_nmos_pwm_set(size_t nmos_idx, uint32_t period, uint32_t pulse);
 
 #ifdef __cplusplus
 }

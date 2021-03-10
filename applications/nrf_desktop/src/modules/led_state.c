@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <zephyr.h>
@@ -22,16 +22,16 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_DESKTOP_LED_STATE_LOG_LEVEL);
 
 static enum led_system_state system_state = LED_SYSTEM_STATE_IDLE;
 
-static u8_t connected;
+static uint8_t connected;
 static bool peer_search;
 static enum peer_operation peer_op = PEER_OPERATION_CANCEL;
-static u8_t cur_peer_id;
+static uint8_t cur_peer_id;
 
 
 static void load_peer_state_led(void)
 {
 	enum led_peer_state state = LED_PEER_STATE_DISCONNECTED;
-	u8_t peer_id = cur_peer_id;
+	uint8_t peer_id = cur_peer_id;
 
 	switch (peer_op) {
 	case PEER_OPERATION_SELECT:
@@ -102,7 +102,6 @@ static bool event_handler(const struct event_header *eh)
 		struct ble_peer_event *event = cast_ble_peer_event(eh);
 
 		switch (event->state)  {
-		case PEER_STATE_SECURED:
 		case PEER_STATE_CONNECTED:
 			__ASSERT_NO_MSG(connected < UINT8_MAX);
 			connected++;
@@ -111,7 +110,9 @@ static bool event_handler(const struct event_header *eh)
 			__ASSERT_NO_MSG(connected > 0);
 			connected--;
 			break;
+		case PEER_STATE_SECURED:
 		case PEER_STATE_CONN_FAILED:
+		case PEER_STATE_DISCONNECTING:
 			/* Ignore */
 			break;
 		default:

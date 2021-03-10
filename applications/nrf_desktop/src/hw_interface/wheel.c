@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <assert.h>
@@ -10,8 +10,8 @@
 
 #include <soc.h>
 #include <device.h>
-#include <sensor.h>
-#include <gpio.h>
+#include <drivers/sensor.h>
+#include <drivers/gpio.h>
 
 #include "event_manager.h"
 #include "wheel_event.h"
@@ -24,7 +24,8 @@
 LOG_MODULE_REGISTER(MODULE, CONFIG_DESKTOP_WHEEL_LOG_LEVEL);
 
 
-#define SENSOR_IDLE_TIMEOUT K_SECONDS(CONFIG_DESKTOP_WHEEL_SENSOR_IDLE_TIMEOUT)
+#define SENSOR_IDLE_TIMEOUT \
+	(CONFIG_DESKTOP_WHEEL_SENSOR_IDLE_TIMEOUT * MSEC_PER_SEC) /* ms */
 
 
 enum state {
@@ -34,9 +35,9 @@ enum state {
 	STATE_SUSPENDED
 };
 
-static const u32_t qdec_pin[] = {
-	DT_NORDIC_NRF_QDEC_QDEC_0_A_PIN,
-	DT_NORDIC_NRF_QDEC_QDEC_0_B_PIN
+static const uint32_t qdec_pin[] = {
+	DT_PROP(DT_NODELABEL(qdec), a_pin),
+	DT_PROP(DT_NODELABEL(qdec), b_pin)
 };
 
 static const struct sensor_trigger qdec_trig = {
@@ -44,8 +45,8 @@ static const struct sensor_trigger qdec_trig = {
 	.chan = SENSOR_CHAN_ROTATION,
 };
 
-static struct device *qdec_dev;
-static struct device *gpio_dev;
+static const struct device *qdec_dev;
+static const struct device *gpio_dev;
 static struct gpio_callback gpio_cbs[2];
 static struct k_spinlock lock;
 static struct k_delayed_work idle_timeout;
@@ -55,7 +56,7 @@ static enum state state;
 static int enable_qdec(enum state next_state);
 
 
-static void data_ready_handler(struct device *dev, struct sensor_trigger *trig)
+static void data_ready_handler(const struct device *dev, struct sensor_trigger *trig)
 {
 	if (IS_ENABLED(CONFIG_ASSERT)) {
 		k_spinlock_key_t key = k_spin_lock(&lock);
@@ -75,13 +76,13 @@ static void data_ready_handler(struct device *dev, struct sensor_trigger *trig)
 
 	struct wheel_event *event = new_wheel_event();
 
-	s32_t wheel = value.val1;
+	int32_t wheel = value.val1;
 
 	if (!IS_ENABLED(CONFIG_DESKTOP_WHEEL_INVERT_AXIS)) {
 		wheel *= -1;
 	}
 
-	BUILD_ASSERT_MSG(CONFIG_DESKTOP_WHEEL_SENSOR_VALUE_DIVIDER > 0,
+	BUILD_ASSERT(CONFIG_DESKTOP_WHEEL_SENSOR_VALUE_DIVIDER > 0,
 			 "Divider must be non-negative");
 	if (CONFIG_DESKTOP_WHEEL_SENSOR_VALUE_DIVIDER > 1) {
 		wheel /= CONFIG_DESKTOP_WHEEL_SENSOR_VALUE_DIVIDER;
@@ -103,9 +104,20 @@ static int wakeup_int_ctrl_nolock(bool enable)
 	 */
 	for (size_t i = 0; (i < ARRAY_SIZE(qdec_pin)) && !err; i++) {
 		if (enable) {
-			err = gpio_pin_enable_callback(gpio_dev, qdec_pin[i]);
+			int val = gpio_pin_get_raw(gpio_dev, qdec_pin[i]);
+
+			if (val < 0) {
+				LOG_ERR("Cannot read pin %zu", i);
+				err = val;
+				continue;
+			}
+
+			err = gpio_pin_interrupt_configure(gpio_dev,
+				qdec_pin[i],
+				val ? GPIO_INT_LEVEL_LOW : GPIO_INT_LEVEL_HIGH);
 		} else {
-			err = gpio_pin_disable_callback(gpio_dev, qdec_pin[i]);
+			err = gpio_pin_interrupt_configure(gpio_dev, qdec_pin[i],
+							   GPIO_INT_DISABLE);
 		}
 
 		if (err) {
@@ -116,8 +128,8 @@ static int wakeup_int_ctrl_nolock(bool enable)
 	return err;
 }
 
-static void wakeup_cb(struct device *gpio_dev, struct gpio_callback *cb,
-		      u32_t pins)
+static void wakeup_cb(const struct device *gpio_dev, struct gpio_callback *cb,
+		      uint32_t pins)
 {
 	struct wake_up_event *event;
 	int err;
@@ -154,33 +166,24 @@ static void wakeup_cb(struct device *gpio_dev, struct gpio_callback *cb,
 
 static int setup_wakeup(void)
 {
-	int err = gpio_pin_configure(gpio_dev, DT_NORDIC_NRF_QDEC_QDEC_0_ENABLE_PIN,
-				     GPIO_DIR_OUT);
+	int err = gpio_pin_configure(gpio_dev,
+				     DT_PROP(DT_NODELABEL(qdec), enable_pin),
+				     GPIO_OUTPUT);
 	if (err) {
 		LOG_ERR("Cannot configure enable pin");
 		return err;
 	}
 
-	err = gpio_pin_write(gpio_dev, DT_NORDIC_NRF_QDEC_QDEC_0_ENABLE_PIN, 0);
+	err = gpio_pin_set_raw(gpio_dev,
+			       DT_PROP(DT_NODELABEL(qdec), enable_pin), 0);
 	if (err) {
 		LOG_ERR("Failed to set enable pin");
 		return err;
 	}
 
 	for (size_t i = 0; i < ARRAY_SIZE(qdec_pin); i++) {
+		err = gpio_pin_configure(gpio_dev, qdec_pin[i], GPIO_INPUT);
 
-		u32_t val;
-
-		err = gpio_pin_read(gpio_dev, qdec_pin[i], &val);
-		if (err) {
-			LOG_ERR("Cannot read pin %zu", i);
-			return err;
-		}
-
-		int flags = GPIO_DIR_IN | GPIO_INT | GPIO_INT_LEVEL;
-		flags |= (val) ? GPIO_INT_ACTIVE_LOW : GPIO_INT_ACTIVE_HIGH;
-
-		err = gpio_pin_configure(gpio_dev, qdec_pin[i], flags);
 		if (err) {
 			LOG_ERR("Cannot configure pin %zu", i);
 			return err;
@@ -212,7 +215,7 @@ static int enable_qdec(enum state next_state)
 		if (SENSOR_IDLE_TIMEOUT > 0) {
 			qdec_triggered = false;
 			k_delayed_work_submit(&idle_timeout,
-					      SENSOR_IDLE_TIMEOUT);
+					      K_MSEC(SENSOR_IDLE_TIMEOUT));
 		}
 	}
 
@@ -266,7 +269,8 @@ static void idle_timeout_fn(struct k_work *work)
 		}
 	} else {
 		qdec_triggered = false;
-		k_delayed_work_submit(&idle_timeout, SENSOR_IDLE_TIMEOUT);
+		k_delayed_work_submit(&idle_timeout,
+				      K_MSEC(SENSOR_IDLE_TIMEOUT));
 	}
 
 	k_spin_unlock(&lock, key);
@@ -280,19 +284,19 @@ static int init(void)
 		k_delayed_work_init(&idle_timeout, idle_timeout_fn);
 	}
 
-	qdec_dev = device_get_binding(DT_NORDIC_NRF_QDEC_QDEC_0_LABEL);
+	qdec_dev = device_get_binding(DT_LABEL(DT_NODELABEL(qdec)));
 	if (!qdec_dev) {
 		LOG_ERR("Cannot get QDEC device");
 		return -ENXIO;
 	}
 
-	gpio_dev = device_get_binding(DT_GPIO_P0_DEV_NAME);
+	gpio_dev = device_get_binding(DT_LABEL(DT_NODELABEL(gpio0)));
 	if (!gpio_dev) {
 		LOG_ERR("Cannot get GPIO device");
 		return -ENXIO;
 	}
 
-	BUILD_ASSERT_MSG(ARRAY_SIZE(qdec_pin) == ARRAY_SIZE(gpio_cbs),
+	BUILD_ASSERT(ARRAY_SIZE(qdec_pin) == ARRAY_SIZE(gpio_cbs),
 		      "Invalid array size");
 	int err = 0;
 

@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 /* This test checks if fprotect have been set up correctly and is able to
@@ -13,20 +13,22 @@
 
 #include <ztest.h>
 #include <device.h>
-#include <flash.h>
+#include <drivers/flash.h>
 
+#define SOC_NV_FLASH_CONTROLLER_NODE DT_NODELABEL(flash_controller)
+#define FLASH_DEV_NAME DT_LABEL(SOC_NV_FLASH_CONTROLLER_NODE)
 
 static void test_flash_write_protected(void)
 {
-	u8_t wd[256];
-	u32_t invalid_write_addr = 0x7000;
+	uint8_t wd[256];
+	uint32_t invalid_write_addr = 0x7000;
 	int err;
 
 	(void)memset(wd, 0xa5, sizeof(wd));
-	struct device *flash_dev = device_get_binding(DT_FLASH_DEV_NAME);
+	const struct device *flash_dev = device_get_binding(FLASH_DEV_NAME);
 	(void) flash_write_protection_set(flash_dev, false);
-	printk("NOTE: A BUS FAULT (BFAR addr 0x%x) immediately after this message"
-		" means the test passed!\n", invalid_write_addr);
+	printk("NOTE: A BUS FAULT immediately after this message"
+		" means the test passed!\n");
 	err = flash_write(flash_dev, invalid_write_addr, wd, sizeof(wd));
 	zassert_equal(0, err, "flash_write failed with err code %d\r\n", err);
 	zassert_unreachable("Should have BUS FAULTed before coming here.");

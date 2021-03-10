@@ -1,7 +1,7 @@
 #
 # Copyright (c) 2019 Nordic Semiconductor
 #
-# SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
 menu "Motion configuration"
@@ -16,22 +16,30 @@ config DESKTOP_MOTION_NONE
 config DESKTOP_MOTION_SENSOR_PMW3360_ENABLE
 	bool "Motion from optical sensor PMW3360"
 	select DESKTOP_MOTION_SENSOR_ENABLE
+	depends on PMW3360
 
 config DESKTOP_MOTION_SENSOR_PAW3212_ENABLE
 	bool "Motion from optical sensor PAW3212"
 	select DESKTOP_MOTION_SENSOR_ENABLE
+	depends on PAW3212
 
 config DESKTOP_MOTION_BUTTONS_ENABLE
 	bool "Motion from buttons"
+	depends on !DESKTOP_BUTTONS_NONE
 
 config DESKTOP_MOTION_SIMULATED_ENABLE
 	bool "Simulated motion"
-	depends on SHELL
 
 endchoice
 
 config DESKTOP_MOTION_SENSOR_ENABLE
 	bool
+
+config DESKTOP_MOTION_SENSOR_TYPE
+	depends on DESKTOP_MOTION_SENSOR_ENABLE
+	string
+	default "pmw3360" if DESKTOP_MOTION_SENSOR_PMW3360_ENABLE
+	default "paw3212" if DESKTOP_MOTION_SENSOR_PAW3212_ENABLE
 
 config DESKTOP_MOTION_UP_KEY_ID
 	int "Up key ID"
@@ -122,6 +130,36 @@ config DESKTOP_MOTION_SENSOR_SLEEP3_TIMEOUT_MS
 	help
 	  Time in milliseconds after last motion detection in which sensor
 	  enters a low power mode 3.
+
+config DESKTOP_MOTION_SENSOR_SLEEP1_SAMPLE_TIME_DEFAULT
+	int "Motion sensor default sleep1 sample time"
+	depends on DESKTOP_MOTION_SENSOR_ENABLE
+	default 0
+
+config DESKTOP_MOTION_SENSOR_SLEEP2_SAMPLE_TIME_DEFAULT
+	int "Motion sensor default sleep2 sample time"
+	depends on DESKTOP_MOTION_SENSOR_ENABLE
+	default 0
+
+config DESKTOP_MOTION_SENSOR_SLEEP3_SAMPLE_TIME_DEFAULT
+	int "Motion sensor default sleep3 sample time"
+	depends on DESKTOP_MOTION_SENSOR_ENABLE
+	default 0
+
+config DESKTOP_MOTION_SENSOR_SLEEP3_SAMPLE_TIME_CONNECTED
+	int "Motion sensor sleep3 sample time when connected"
+	depends on DESKTOP_MOTION_SENSOR_ENABLE
+	default DESKTOP_MOTION_SENSOR_SLEEP3_SAMPLE_TIME_DEFAULT
+
+config DESKTOP_MOTION_SENSOR_SLEEP_DISABLE_ON_USB
+	bool "Disable low power modes if powered from USB"
+	depends on DESKTOP_MOTION_SENSOR_ENABLE
+	depends on DESKTOP_USB_ENABLE
+	depends on !DESKTOP_BATTERY_CHARGER_NONE
+	default y
+	help
+	  Low power modes reduce device power consumption, but increase
+	  response time.
 
 if !DESKTOP_MOTION_NONE
 module = DESKTOP_MOTION

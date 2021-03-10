@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <zephyr.h>
@@ -9,8 +9,8 @@
 #include <stdlib.h>
 #include <cJSON.h>
 #include <cJSON_os.h>
-#include <modem_info.h>
-#include <at_cmd_parser/at_params.h>
+#include <modem/modem_info.h>
+#include <modem/at_params.h>
 #include <logging/log.h>
 
 LOG_MODULE_REGISTER(modem_info_json);
@@ -79,7 +79,7 @@ static int json_add_data(struct lte_param *param, cJSON *json_obj)
 		total_len += strlen(param->value_string);
 		ret += json_add_str(json_obj, data_name, param->value_string);
 	} else {
-		total_len += sizeof(u16_t);
+		total_len += sizeof(uint16_t);
 		ret += json_add_num(json_obj, data_name, param->value);
 	}
 

@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #ifndef __SENSOR_SENSOR_SIM_H__
@@ -12,9 +12,9 @@
 
 struct sensor_sim_data {
 #if defined(CONFIG_SENSOR_SIM_TRIGGER)
-	struct device *gpio;
+	const struct device *gpio;
 	const char *gpio_port;
-	u8_t gpio_pin;
+	uint8_t gpio_pin;
 	struct gpio_callback gpio_cb;
 	struct k_sem gpio_sem;
 

@@ -1,12 +1,12 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <sys/types.h>
 #include <kernel.h>
-#include <misc/util.h>
+#include <sys/util.h>
 #include <settings/settings.h>
 
 #define MODULE fn_keys
@@ -25,8 +25,33 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_DESKTOP_FN_KEYS_LOG_LEVEL);
 static bool fn_switch_active;
 static bool fn_lock_active;
 
-static u16_t fn_key_pressed[CONFIG_DESKTOP_FN_KEYS_MAX_ACTIVE];
+static uint16_t fn_key_pressed[CONFIG_DESKTOP_FN_KEYS_MAX_ACTIVE];
 static size_t fn_key_pressed_count;
+
+
+static int settings_set(const char *key, size_t len_rd,
+			settings_read_cb read_cb, void *cb_arg)
+{
+
+	if (!strcmp(key, FN_LOCK_STORAGE_NAME)) {
+		ssize_t len = read_cb(cb_arg, &fn_lock_active,
+				      sizeof(fn_lock_active));
+
+		if ((len != sizeof(fn_lock_active)) || (len != len_rd)) {
+			LOG_ERR("Can't read fn_lock_active from storage");
+
+			return len;
+		}
+	}
+
+	return 0;
+}
+
+#ifdef CONFIG_DESKTOP_STORE_FN_LOCK
+SETTINGS_STATIC_HANDLER_DEFINE(fn_keys, MODULE_NAME, NULL, settings_set, NULL,
+			       NULL);
+
+#endif /* CONFIG_DESKTOP_STORE_FN_LOCK */
 
 
 static void validate_enabled_fn_keys(void)
@@ -46,7 +71,7 @@ static void validate_enabled_fn_keys(void)
 	}
 }
 
-static void *bsearch(const void *key, const u8_t *base,
+static void *bsearch(const void *key, const uint8_t *base,
 		     size_t elem_num, size_t elem_size,
 		     int (*compare)(const void *, const void *))
 {
@@ -80,18 +105,18 @@ static void *bsearch(const void *key, const u8_t *base,
 
 static int key_id_compare(const void *a, const void *b)
 {
-	const u16_t *p_a = a;
-	const u16_t *p_b = b;
+	const uint16_t *p_a = a;
+	const uint16_t *p_b = b;
 
 	return (*p_a - *p_b);
 }
 
-static bool fn_key_enabled(u16_t key_id)
+static bool fn_key_enabled(uint16_t key_id)
 {
 	validate_enabled_fn_keys();
 
-	u16_t *p = bsearch(&key_id,
-			   (u8_t *)fn_keys,
+	uint16_t *p = bsearch(&key_id,
+			   (uint8_t *)fn_keys,
 			   ARRAY_SIZE(fn_keys),
 			   sizeof(fn_keys[0]),
 			   key_id_compare);
@@ -186,41 +211,12 @@ static bool button_event_handler(const struct button_event *event)
 	return false;
 }
 
-static int settings_set(const char *key, size_t len_rd,
-			settings_read_cb read_cb, void *cb_arg)
+static void silence_unused(void)
 {
-
-	if (!strcmp(key, FN_LOCK_STORAGE_NAME)) {
-		ssize_t len = read_cb(cb_arg, &fn_lock_active,
-				      sizeof(fn_lock_active));
-		if (len != sizeof(fn_lock_active)) {
-			LOG_ERR("Can't read fn_lock_active from storage");
-
-			return len;
-		}
+	/* These things will be opt-out by the compiler. */
+	if (!IS_ENABLED(CONFIG_DESKTOP_STORE_FN_LOCK)) {
+		ARG_UNUSED(settings_set);
 	}
-
-	return 0;
-}
-
-static int init_settings(void)
-{
-	if (IS_ENABLED(CONFIG_DESKTOP_STORE_FN_LOCK)) {
-		static struct settings_handler sh = {
-			.name = MODULE_NAME,
-			.h_set = settings_set,
-		};
-
-		int err = settings_register(&sh);
-
-		if (err) {
-			LOG_ERR("Cannot register settings handler(err:%d)",
-				err);
-			return err;
-		}
-	}
-
-	return 0;
 }
 
 static bool event_handler(const struct event_header *eh)
@@ -234,10 +230,7 @@ static bool event_handler(const struct event_header *eh)
 			cast_module_state_event(eh);
 
 		if (check_state(event, MODULE_ID(main), MODULE_STATE_READY)) {
-			if (init_settings()) {
-				module_set_state(MODULE_STATE_ERROR);
-				return false;
-			}
+			silence_unused();
 			module_set_state(MODULE_STATE_READY);
 		}
 

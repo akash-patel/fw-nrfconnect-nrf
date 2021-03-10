@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 #include <ztest.h>
 #include <string.h>
@@ -25,7 +25,7 @@ bool dfu_target_mcuboot_identify(const void *const buf)
 	return identify_retval;
 }
 
-int dfu_target_mcuboot_init(size_t file_size)
+int dfu_target_mcuboot_init(size_t file_size, dfu_target_callback_t cb)
 {
 	return init_retval;
 }
@@ -52,15 +52,16 @@ static void init(void)
 {
 	int err;
 	int ret;
+	uint8_t buf[64];
 
 	/* Return 'true' when dfu_target_mcuboot_identify() is called */
 	identify_retval = true;
 
-	ret = dfu_target_img_type(0, 0);
+	ret = dfu_target_img_type(buf, sizeof(buf));
 
 	zassert_true(ret > 0, "Valid type not recognized");
 
-	err = dfu_target_init(ret, FILE_SIZE);
+	err = dfu_target_init(ret, FILE_SIZE, NULL);
 	zassert_equal(err, 0, NULL);
 }
 
@@ -73,19 +74,20 @@ static void test_init(void)
 {
 	int ret;
 	int err;
+	uint8_t buf[64];
 
 	done();
 	init_retval = 0;
 	done_retval = 0;
 
 	identify_retval = true;
-	ret = dfu_target_img_type(0, 0);
+	ret = dfu_target_img_type(buf, sizeof(buf));
 	zassert_true(ret > 0, "Valid type not recognized");
 
-	err = dfu_target_init(ret, FILE_SIZE);
+	err = dfu_target_init(ret, FILE_SIZE, NULL);
 	zassert_equal(err, 0, NULL);
 
-	err = dfu_target_init(ret, FILE_SIZE);
+	err = dfu_target_init(ret, FILE_SIZE, NULL);
 	zassert_equal(err, 0, "Re-initialization should pass");
 
 	err = dfu_target_done(true);
@@ -94,17 +96,17 @@ static void test_init(void)
 	/* Now clean up and try invalid types */
 	done();
 
-	err = dfu_target_init(0, FILE_SIZE);
+	err = dfu_target_init(0, FILE_SIZE, NULL);
 	zassert_true(err < 0, "Did not fail when invalid type is used");
 
 	done();
 
-	err = dfu_target_init(2, FILE_SIZE);
+	err = dfu_target_init(2, FILE_SIZE, NULL);
 	zassert_true(err < 0, "Did not fail when invalid type is used");
 
 	init_retval = -42;
 
-	err = dfu_target_init(ret, FILE_SIZE);
+	err = dfu_target_init(ret, FILE_SIZE, NULL);
 	zassert_equal(err, -42, "Did not return error code from target");
 
 	done();

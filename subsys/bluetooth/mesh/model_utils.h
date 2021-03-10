@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 /**
  * @file
@@ -64,7 +64,7 @@ int model_send(struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
  */
 int model_ackd_send(struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
 		    struct net_buf_simple *buf,
-		    struct bt_mesh_model_ack_ctx *ack, u32_t rsp_op,
+		    struct bt_mesh_model_ack_ctx *ack, uint32_t rsp_op,
 		    void *user_data);
 
 static inline void model_ack_init(struct bt_mesh_model_ack_ctx *ack)
@@ -72,8 +72,13 @@ static inline void model_ack_init(struct bt_mesh_model_ack_ctx *ack)
 	k_sem_init(&ack->sem, 0, 1);
 }
 
+static inline void model_ack_reset(struct bt_mesh_model_ack_ctx *ack)
+{
+	k_sem_reset(&ack->sem);
+}
+
 static inline int model_ack_ctx_prepare(struct bt_mesh_model_ack_ctx *ack,
-					u32_t op, u16_t dst, void *user_data)
+					uint32_t op, uint16_t dst, void *user_data)
 {
 	if (ack->op != 0) {
 		return -EALREADY;
@@ -85,7 +90,7 @@ static inline int model_ack_ctx_prepare(struct bt_mesh_model_ack_ctx *ack,
 }
 
 static inline bool model_ack_match(const struct bt_mesh_model_ack_ctx *ack_ctx,
-				   u32_t op,
+				   uint32_t op,
 				   const struct bt_mesh_msg_ctx *msg_ctx)
 {
 	return (ack_ctx->op == op &&
@@ -93,9 +98,9 @@ static inline bool model_ack_match(const struct bt_mesh_model_ack_ctx *ack_ctx,
 }
 
 static inline int model_ack_wait(struct bt_mesh_model_ack_ctx *ack,
-				 s32_t timeout)
+				 int32_t timeout)
 {
-	int status = k_sem_take(&ack->sem, timeout);
+	int status = k_sem_take(&ack->sem, K_MSEC(timeout));
 
 	ack->op = 0;
 	return status;
@@ -127,13 +132,13 @@ static inline void model_ack_clear(struct bt_mesh_model_ack_ctx *ack)
  * updated.
  * @retval -EAGAIN The incoming message is of the same transaction.
  */
-int tid_check_and_update(struct bt_mesh_tid_ctx *prev_transaction, u8_t tid,
+int tid_check_and_update(struct bt_mesh_tid_ctx *prev_transaction, uint8_t tid,
 			 const struct bt_mesh_msg_ctx *ctx);
 
-u8_t model_delay_encode(u32_t delay);
-s32_t model_delay_decode(u8_t encoded_delay);
-s32_t model_transition_decode(u8_t encoded_transition);
-u8_t model_transition_encode(s32_t transition_time);
+uint8_t model_delay_encode(uint32_t delay);
+int32_t model_delay_decode(uint8_t encoded_delay);
+int32_t model_transition_decode(uint8_t encoded_transition);
+uint8_t model_transition_encode(int32_t transition_time);
 
 static inline void
 model_transition_buf_add(struct net_buf_simple *buf,
@@ -155,6 +160,14 @@ static inline bool
 model_transition_is_active(const struct bt_mesh_model_transition *transition)
 {
 	return (transition->time > 0 || transition->delay > 0);
+}
+
+static inline bool
+model_transition_is_invalid(const struct bt_mesh_model_transition *transition)
+{
+	return (transition != NULL &&
+		(transition->time > BT_MESH_MODEL_TRANSITION_TIME_MAX_MS ||
+		 transition->delay > BT_MESH_MODEL_DELAY_TIME_MAX_MS));
 }
 
 #endif /* MODEL_UTILS_H__ */

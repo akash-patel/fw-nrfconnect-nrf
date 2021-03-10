@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <stddef.h>
@@ -13,8 +13,8 @@
 #include "bl_crypto_internal.h"
 
 
-int bl_secp256r1_validate(const u8_t *hash, u32_t hash_len,
-			const u8_t *public_key, const u8_t *signature)
+int bl_secp256r1_validate(const uint8_t *hash, uint32_t hash_len,
+			const uint8_t *public_key, const uint8_t *signature)
 {
 	if (!hash || (hash_len != CONFIG_SB_HASH_LEN) || !public_key
 			|| ! signature) {

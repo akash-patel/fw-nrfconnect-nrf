@@ -1,23 +1,24 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <zephyr.h>
 #include <stdio.h>
 #include <ctype.h>
 #include <logging/log.h>
-#include <uart.h>
+#include <drivers/uart.h>
 #include <string.h>
 #include <init.h>
-#include <at_cmd.h>
-#include <at_notif.h>
+#include <modem/at_cmd.h>
+#include <modem/at_notif.h>
 
 LOG_MODULE_REGISTER(at_host, CONFIG_AT_HOST_LOG_LEVEL);
 
 /* Stack definition for AT host workqueue */
-#define AT_HOST_STACK_SIZE 512
+#define AT_HOST_STACK_SIZE 1024
+
 K_THREAD_STACK_DEFINE(at_host_stack_area, AT_HOST_STACK_SIZE);
 
 #define CONFIG_UART_0_NAME      "UART_0"
@@ -53,14 +54,14 @@ enum select_uart {
 };
 
 static enum term_modes term_mode;
-static struct device *uart_dev;
+static const struct device *uart_dev;
 static char at_buf[AT_BUF_SIZE]; /* AT command and modem response buffer */
 static struct k_work_q at_host_work_q;
 static struct k_work cmd_send_work;
 
 
 
-static inline void write_uart_string(char *str)
+static inline void write_uart_string(const char *str)
 {
 	/* Send characters until, but not including, null */
 	for (size_t i = 0; str[i]; i++) {
@@ -68,7 +69,7 @@ static inline void write_uart_string(char *str)
 	}
 }
 
-static void response_handler(void *context, char *response)
+static void response_handler(void *context, const char *response)
 {
 	ARG_UNUSED(context);
 
@@ -115,9 +116,8 @@ static void cmd_send(struct k_work *work)
 	uart_irq_rx_enable(uart_dev);
 }
 
-static void uart_rx_handler(u8_t character)
+static void uart_rx_handler(uint8_t character)
 {
-	static bool cr_state; /* Whether last character received was a <CR> */
 	static bool inside_quotes;
 	static size_t at_cmd_len;
 
@@ -132,35 +132,31 @@ static void uart_rx_handler(u8_t character)
 		return;
 	}
 
-	/*
-	 * Handle termination characters, if outside quotes.
-	 * The characters are never written to buffer unless inside quotes.
-	 */
+	/* Handle termination characters, if outside quotes. */
 	if (!inside_quotes) {
 		switch (character) {
 		case '\0':
 			if (term_mode == MODE_NULL_TERM) {
 				goto send;
 			}
+			LOG_WRN("Ignored null; would terminate string early.");
 			return;
 		case '\r':
 			if (term_mode == MODE_CR) {
 				goto send;
 			}
-			if (term_mode == MODE_CR_LF) {
-				cr_state = true;
-			}
-			return;
+			break;
 		case '\n':
 			if (term_mode == MODE_LF) {
 				goto send;
 			}
-			if (term_mode == MODE_CR_LF && cr_state) {
+			if (term_mode == MODE_CR_LF &&
+			    at_cmd_len > 0 &&
+			    at_buf[at_cmd_len - 1] == '\r') {
 				goto send;
 			}
-			return;
+			break;
 		}
-		cr_state = false;
 	}
 
 	/* Detect AT command buffer overflow, leaving space for null */
@@ -183,9 +179,17 @@ send:
 	at_buf[at_cmd_len] = '\0'; /* Terminate the command string */
 
 	/* Reset UART handler state */
-	cr_state = false;
 	inside_quotes = false;
 	at_cmd_len = 0;
+
+	/* Check for the presence of one printable non-whitespace character */
+	for (const char *c = at_buf;; c++) {
+		if (*c > ' ') {
+			break;
+		} else if (*c == '\0') {
+			return; /* Drop command, if it has no such character */
+		}
+	}
 
 	/* Send the command, if there is one to send */
 	if (at_buf[0]) {
@@ -194,9 +198,11 @@ send:
 	}
 }
 
-static void isr(struct device *dev)
+static void isr(const struct device *dev, void *user_data)
 {
-	u8_t character;
+	ARG_UNUSED(user_data);
+
+	uint8_t character;
 
 	uart_irq_update(dev);
 
@@ -217,7 +223,7 @@ static void isr(struct device *dev)
 static int at_uart_init(char *uart_dev_name)
 {
 	int err;
-	u8_t dummy;
+	uint8_t dummy;
 
 	uart_dev = device_get_binding(uart_dev_name);
 	if (uart_dev == NULL) {
@@ -225,7 +231,7 @@ static int at_uart_init(char *uart_dev_name)
 		return -EINVAL;
 	}
 
-	u32_t start_time = k_uptime_get_32();
+	uint32_t start_time = k_uptime_get_32();
 
 	/* Wait for the UART line to become valid */
 	do {
@@ -244,7 +250,7 @@ static int at_uart_init(char *uart_dev_name)
 			while (uart_fifo_read(uart_dev, &dummy, 1)) {
 				/* Do nothing with the data */
 			}
-			k_sleep(10);
+			k_sleep(K_MSEC(10));
 		}
 	} while (err);
 
@@ -252,7 +258,7 @@ static int at_uart_init(char *uart_dev_name)
 	return err;
 }
 
-static int at_host_init(struct device *arg)
+static int at_host_init(const struct device *arg)
 {
 	char *uart_dev_name;
 	int err;

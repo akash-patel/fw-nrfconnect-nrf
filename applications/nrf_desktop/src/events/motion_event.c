@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <stdio.h>
@@ -21,7 +21,6 @@ static void profile_motion_event(struct log_event_buf *buf,
 {
 	const struct motion_event *event = cast_motion_event(eh);
 
-	ARG_UNUSED(event);
 	profiler_log_encode_u32(buf, event->dx);
 	profiler_log_encode_u32(buf, event->dy);
 }

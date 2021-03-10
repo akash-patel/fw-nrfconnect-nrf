@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <zephyr.h>
@@ -11,7 +11,7 @@
 #include <data_event.h>
 
 #define MODULE test_oom
-#define TEST_EVENTS_CNT 100
+#define TEST_EVENTS_CNT 150
 
 static struct data_event *event_tab[TEST_EVENTS_CNT];
 static bool oom_error;

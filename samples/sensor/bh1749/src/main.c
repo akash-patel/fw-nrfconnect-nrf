@@ -7,9 +7,9 @@
 
 #include <zephyr.h>
 #include <device.h>
-#include <sensor.h>
+#include <drivers/sensor.h>
 #include <stdio.h>
-#include <misc/__assert.h>
+#include <sys/__assert.h>
 
 #define THRESHOLD_UPPER                 50
 #define THRESHOLD_LOWER                 0
@@ -17,7 +17,8 @@
 
 static K_SEM_DEFINE(sem, 0, 1);
 
-static void trigger_handler(struct device *dev, struct sensor_trigger *trigger)
+static void trigger_handler(const struct device *dev,
+			    struct sensor_trigger *trigger)
 {
 	ARG_UNUSED(dev);
 	switch (trigger->type) {
@@ -34,7 +35,8 @@ static void trigger_handler(struct device *dev, struct sensor_trigger *trigger)
 	k_sem_give(&sem);
 }
 
-static int bh1479_set_attribute(struct device *dev, enum sensor_channel chan,
+static int bh1479_set_attribute(const struct device *dev,
+				enum sensor_channel chan,
 				enum sensor_attribute attr, int value)
 {
 	int ret;
@@ -53,7 +55,7 @@ static int bh1479_set_attribute(struct device *dev, enum sensor_channel chan,
 /* This sets up  the sensor to signal valid data when a threshold
  * value is reached.
  */
-static void process(struct device *dev)
+static void process(const struct device *dev)
 {
 	int ret;
 	struct sensor_value temp_val;
@@ -120,23 +122,23 @@ static void process(struct device *dev)
 			return;
 		}
 		printk("BH1749 IR: %d\n", temp_val.val1);
-		k_sleep(2000);
+		k_sleep(K_MSEC(2000));
 	}
 }
 
 void main(void)
 {
-	struct device *dev;
+	const struct device *dev;
 
 	if (IS_ENABLED(CONFIG_LOG_BACKEND_RTT)) {
 		/* Give RTT log time to be flushed before executing tests */
-		k_sleep(500);
+		k_sleep(K_MSEC(500));
 	}
 	dev = device_get_binding("BH1749");
 	if (dev == NULL) {
 		printk("Failed to get device binding\n");
 		return;
 	}
-	printk("device is %p, name is %s\n", dev, dev->config->name);
+	printk("device is %p, name is %s\n", dev, dev->name);
 	process(dev);
 }

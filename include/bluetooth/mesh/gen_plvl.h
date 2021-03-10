@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 /**
  * @file
@@ -46,7 +46,7 @@ extern "C" {
 #define BT_MESH_PLVL_MSG_LEN_DEFAULT_GET 0
 #define BT_MESH_PLVL_MSG_LEN_DEFAULT_STATUS 2
 #define BT_MESH_PLVL_MSG_LEN_RANGE_GET 0
-#define BT_MESH_PLVL_MSG_LEN_RANGE_STATUS 4
+#define BT_MESH_PLVL_MSG_LEN_RANGE_STATUS 5
 #define BT_MESH_PLVL_MSG_LEN_DEFAULT_SET 2
 #define BT_MESH_PLVL_MSG_LEN_RANGE_SET 4
 /** @endcond */
@@ -54,7 +54,7 @@ extern "C" {
 /** Power Level set message parameters. */
 struct bt_mesh_plvl_set {
 	/** Power Level. */
-	u16_t power_lvl;
+	uint16_t power_lvl;
 	/**
 	 * Transition time parameters for the state change. Setting the
 	 * transition to NULL makes the server use its default transition time
@@ -66,20 +66,21 @@ struct bt_mesh_plvl_set {
 /** Power Level status message parameters. */
 struct bt_mesh_plvl_status {
 	/** Current Power Level. */
-	u16_t current;
+	uint16_t current;
 	/** Target Power Level. */
-	u16_t target;
+	uint16_t target;
 	/**
-	 * Time remaining of the ongoing transition, or @ref K_FOREVER.
-	 * If there's no ongoing transition, @c remaining_time is 0.
+	 * Time remaining of the ongoing transition in milliseconds, or
+	 * @em SYS_FOREVER_MS. If there's no ongoing transition,
+	 * @c remaining_time is 0.
 	 */
-	s32_t remaining_time;
+	int32_t remaining_time;
 };
 
 /** Power Level range parameters. */
 struct bt_mesh_plvl_range {
-	u16_t min; /**< Minimum allowed Power Level. */
-	u16_t max; /**< Maximum allowed Power Level. */
+	uint16_t min; /**< Minimum allowed Power Level. */
+	uint16_t max; /**< Maximum allowed Power Level. */
 };
 
 /** Power Level range message parameters. */
@@ -97,7 +98,7 @@ struct bt_mesh_plvl_range_status {
  *
  * @return The Power Level in percent.
  */
-static inline u8_t bt_mesh_plvl_to_percent(u16_t plvl)
+static inline uint8_t bt_mesh_plvl_to_percent(uint16_t plvl)
 {
 	return (100UL * plvl) / UINT16_MAX;
 }
@@ -109,7 +110,7 @@ static inline u8_t bt_mesh_plvl_to_percent(u16_t plvl)
  *
  * @return The raw Power Level.
  */
-static inline u16_t bt_mesh_plvl_from_percent(u8_t plvl_percent)
+static inline uint16_t bt_mesh_plvl_from_percent(uint8_t plvl_percent)
 {
 	return (UINT16_MAX * plvl_percent) / 100;
 }

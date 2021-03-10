@@ -1,16 +1,16 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
-#include <at_cmd_parser/at_cmd_parser.h>
-#include <at_cmd.h>
-#include <at_notif.h>
+#include <modem/at_cmd_parser.h>
+#include <modem/at_cmd.h>
+#include <modem/at_notif.h>
 #include <ctype.h>
 #include <device.h>
 #include <errno.h>
-#include <modem_info.h>
+#include <modem/modem_info.h>
 #include <net/socket.h>
 #include <stdio.h>
 #include <string.h>
@@ -34,7 +34,7 @@ LOG_MODULE_REGISTER(modem_info);
 #define AT_CMD_PDP_CONTEXT	"AT+CGDCONT?"
 #define AT_CMD_UICC_STATE	"AT%XSIM?"
 #define AT_CMD_VBAT		"AT%XVBAT"
-#define AT_CMD_TEMP		"AT%XTEMP"
+#define AT_CMD_TEMP		"AT%XTEMP?"
 #define AT_CMD_FW_VERSION	"AT+CGMR"
 #define AT_CMD_CRSM		"AT+CRSM"
 #define AT_CMD_ICCID		"AT+CRSM=176,12258,0,0,10"
@@ -65,9 +65,18 @@ LOG_MODULE_REGISTER(modem_info);
 #define IMSI_DATA_NAME		"imsi"
 #define MODEM_IMEI_DATA_NAME	"imei"
 #define DATE_TIME_DATA_NAME	"dateTime"
+#define APN_DATA_NAME		"apn"
 
-#define RSRP_PARAM_INDEX	1
-#define RSRP_PARAM_COUNT	5
+#define AT_CMD_RSP_DELIM "\r\n"
+#define IP_ADDR_SEPARATOR ", "
+#define IP_ADDR_SEPARATOR_LEN (sizeof(IP_ADDR_SEPARATOR)-1)
+
+#define RSRP_NOTIFY_PARAM_INDEX	1
+#define RSRP_NOTIFY_PARAM_COUNT	5
+
+#define RSRP_PARAM_INDEX	6
+#define RSRP_PARAM_COUNT	7
+
 #define RSRP_OFFSET_VAL		141
 
 #define BAND_PARAM_INDEX	1 /* Index of desired parameter */
@@ -94,14 +103,16 @@ LOG_MODULE_REGISTER(modem_info);
 #define VBAT_PARAM_INDEX	1
 #define VBAT_PARAM_COUNT	2
 
-#define TEMP_PARAM_INDEX	2
-#define TEMP_PARAM_COUNT	3
+#define TEMP_PARAM_INDEX	1
+#define TEMP_PARAM_COUNT	2
 
 #define MODEM_FW_PARAM_INDEX	0
 #define MODEM_FW_PARAM_COUNT	1
 
 #define ICCID_PARAM_INDEX	3
 #define ICCID_PARAM_COUNT	4
+#define ICCID_LEN		20
+#define ICCID_PAD_CHAR		'F'
 
 #define LTE_MODE_PARAM_INDEX	1
 #define NBIOT_MODE_PARAM_INDEX	2
@@ -117,11 +128,14 @@ LOG_MODULE_REGISTER(modem_info);
 #define DATE_TIME_PARAM_INDEX	1
 #define DATE_TIME_PARAM_COUNT	2
 
+#define APN_PARAM_INDEX		3
+#define APN_PARAM_COUNT		7
+
 struct modem_info_data {
 	const char *cmd;
 	const char *data_name;
-	u8_t param_index;
-	u8_t param_count;
+	uint8_t param_index;
+	uint8_t param_count;
 	enum at_param_type data_type;
 };
 
@@ -293,6 +307,14 @@ static const struct modem_info_data date_time_data = {
 	.data_type	= AT_PARAM_TYPE_STRING,
 };
 
+static const struct modem_info_data apn_data = {
+	.cmd		= AT_CMD_PDP_CONTEXT,
+	.data_name	= APN_DATA_NAME,
+	.param_index	= APN_PARAM_INDEX,
+	.param_count	= APN_PARAM_COUNT,
+	.data_type	= AT_PARAM_TYPE_STRING,
+};
+
 static const struct modem_info_data *const modem_data[] = {
 	[MODEM_INFO_RSRP]	= &rsrp_data,
 	[MODEM_INFO_CUR_BAND]	= &band_data,
@@ -315,20 +337,21 @@ static const struct modem_info_data *const modem_data[] = {
 	[MODEM_INFO_IMSI]	= &imsi_data,
 	[MODEM_INFO_IMEI]	= &imei_data,
 	[MODEM_INFO_DATE_TIME]	= &date_time_data,
+	[MODEM_INFO_APN]	= &apn_data,
 };
 
 static rsrp_cb_t modem_info_rsrp_cb;
 static struct at_param_list m_param_list;
 
-static bool is_cesq_notification(char *buf, size_t len)
+static bool is_cesq_notification(const char *buf, size_t len)
 {
 	return strstr(buf, AT_CMD_CESQ_RESP) ? true : false;
 }
 
 static void flip_iccid_string(char *buf)
 {
-	u8_t current_char;
-	u8_t next_char;
+	uint8_t current_char;
+	uint8_t next_char;
 
 	for (size_t i = 0; i < strlen(buf); i = i + 2) {
 		current_char = buf[i];
@@ -343,12 +366,16 @@ static int modem_info_parse(const struct modem_info_data *modem_data,
 			    const char *buf)
 {
 	int err;
-	u32_t param_index;
+	uint32_t param_index;
 
 	err = at_parser_max_params_from_str(buf, NULL, &m_param_list,
 					    modem_data->param_count);
 
-	if (err != 0) {
+	if (err == -EAGAIN) {
+		LOG_DBG("More items exist to parse for: %s",
+			modem_data->data_name);
+		err = 0;
+	} else if (err != 0) {
 		return err;
 	}
 
@@ -390,7 +417,7 @@ int modem_info_name_get(enum modem_info info, char *name)
 	return len;
 }
 
-int modem_info_short_get(enum modem_info info, u16_t *buf)
+int modem_info_short_get(enum modem_info info, uint16_t *buf)
 {
 	int err;
 	char recv_buf[CONFIG_MODEM_INFO_BUFFER_SIZE] = {0};
@@ -427,18 +454,27 @@ int modem_info_short_get(enum modem_info info, u16_t *buf)
 		return err;
 	}
 
-	return sizeof(u16_t);
+	return sizeof(uint16_t);
 }
 
-int modem_info_string_get(enum modem_info info, char *buf)
+int modem_info_string_get(enum modem_info info, char *buf,
+				  const size_t buf_size)
 {
 	int err;
-	size_t len = 0;
 	char recv_buf[CONFIG_MODEM_INFO_BUFFER_SIZE] = {0};
-	u16_t param_value;
-	int cmd_length = 0;
+	uint16_t param_value;
+	int ip_cnt = 0;
+	char *ip_str_end = recv_buf;
+	/* index into the AT cmd response buffer */
+	size_t cmd_rsp_idx = 0;
+	/* length of each parsed IP address line */
+	size_t ip_str_len = 0;
+	/* tracks length of buf when parsing multiple IP addresses */
+	size_t out_buf_len = 0;
+	/* return value indicating length of the string written to buf */
+	size_t len = 0;
 
-	if (buf == NULL) {
+	if ((buf == NULL) || (buf_size == 0)) {
 		return -EINVAL;
 	}
 
@@ -447,11 +483,39 @@ int modem_info_string_get(enum modem_info info, char *buf)
 			  CONFIG_MODEM_INFO_BUFFER_SIZE,
 			  NULL);
 
+	/* modem_info does not yet support array objects, so here we handle
+	 * the supported bands independently as a string
+	 */
+	if (info == MODEM_INFO_SUP_BAND) {
+		strcpy(buf, recv_buf + sizeof("%XCBAND: ") - 1);
+		return strlen(buf);
+	}
+	if (info == MODEM_INFO_IP_ADDRESS) {
+		/* check for multiple IP addresses */
+		while ((ip_str_end = strstr(ip_str_end, AT_CMD_RSP_DELIM))
+			   != NULL) {
+			++ip_str_end;
+			++ip_cnt;
+		}
+		LOG_DBG("Device contains %d IP addresses", ip_cnt);
+	}
+
 	if (err != 0) {
 		return -EIO;
 	}
 
-	err = modem_info_parse(modem_data[info], &recv_buf[cmd_length]);
+parse:
+	if (info == MODEM_INFO_IP_ADDRESS) {
+		/* parse each IP address line separately */
+		ip_str_end = strstr(&recv_buf[cmd_rsp_idx], AT_CMD_RSP_DELIM);
+		if (ip_str_end == NULL) {
+			return -EFAULT;
+		}
+		/* get the size and then null-terminate the line */
+		ip_str_len = ip_str_end - &recv_buf[cmd_rsp_idx];
+		recv_buf[++ip_str_len] = 0;
+	}
+	err = modem_info_parse(modem_data[info], &recv_buf[cmd_rsp_idx]);
 
 	if (err) {
 		LOG_ERR("Unable to parse data: %d", err);
@@ -466,37 +530,91 @@ int modem_info_string_get(enum modem_info info, char *buf)
 			LOG_ERR("Unable to obtain short: %d", err);
 			return err;
 		}
-
-		err = snprintf(buf, MODEM_INFO_MAX_RESPONSE_SIZE,
-				"%d", param_value);
+		len = snprintf(buf, buf_size, "%d", param_value);
+		if ((len <= 0) || (len > buf_size)) {
+			return -EMSGSIZE;
+		}
 	} else if (modem_data[info]->data_type == AT_PARAM_TYPE_STRING) {
-		len = MODEM_INFO_MAX_RESPONSE_SIZE;
+		len = buf_size - out_buf_len;
 		err = at_params_string_get(&m_param_list,
 					   modem_data[info]->param_index,
-					   buf,
+					   &buf[out_buf_len],
 					   &len);
+		if (err != 0) {
+			return err;
+		} else if (len >= buf_size) {
+			return -EMSGSIZE;
+		}
+		/* null-terminate the string */
+		buf[len] = 0;
 	}
 
 	if (info == MODEM_INFO_ICCID) {
 		flip_iccid_string(buf);
+
+		/* Remove padding char from 19 digit (18+1) ICCIDs */
+		if ((len == ICCID_LEN) &&
+		   (buf[len - 1] == ICCID_PAD_CHAR)) {
+			buf[len - 1] = '\0';
+			--len;
+		}
+	}
+
+	if ((info == MODEM_INFO_IP_ADDRESS) && (ip_cnt > 0)) {
+		/* for now get only IPv4 address, discard IPv6
+		 * which are separated by a space
+		 */
+		char *ip_v6_str = strstr(&buf[out_buf_len], " ");
+
+		if (ip_v6_str) {
+			/* discard IPv6 info and adjust length */
+			*ip_v6_str = 0;
+			len = strlen(&buf[out_buf_len]);
+		}
+		out_buf_len += len;
+		/* if there are more addresses, add a separator */
+		if (ip_cnt > 1) {
+			err = snprintf(&buf[out_buf_len],
+					buf_size - out_buf_len,
+					IP_ADDR_SEPARATOR);
+			if ((err <= 0) || (err > (buf_size - out_buf_len))) {
+				return -EMSGSIZE;
+			}
+			out_buf_len += IP_ADDR_SEPARATOR_LEN;
+			/* advance (after null) to next IP string */
+			cmd_rsp_idx = ip_str_len + 1;
+		}
+
+		if (--ip_cnt) {
+			goto parse;
+		} else {
+			len = out_buf_len;
+		}
 	}
 
 	return len <= 0 ? -ENOTSUP : len;
 }
 
-static void modem_info_rsrp_subscribe_handler(void *context, char *response)
+static void modem_info_rsrp_subscribe_handler(void *context, const char *response)
 {
 	ARG_UNUSED(context);
 
-	u16_t param_value;
+	uint16_t param_value;
 	int err;
 
 	if (!is_cesq_notification(response, strlen(response))) {
 		return;
 	}
 
-	err = modem_info_parse(modem_data[MODEM_INFO_RSRP],
-			       response);
+	const struct modem_info_data rsrp_notify_data = {
+		.cmd		= AT_CMD_CESQ,
+		.data_name	= RSRP_DATA_NAME,
+		.param_index	= RSRP_NOTIFY_PARAM_INDEX,
+		.param_count	= RSRP_NOTIFY_PARAM_COUNT,
+		.data_type	= AT_PARAM_TYPE_NUM_SHORT,
+	};
+
+	err = modem_info_parse(&rsrp_notify_data, response);
 	if (err != 0) {
 		LOG_ERR("modem_info_parse failed to parse "
 			"CESQ notification, %d", err);
@@ -504,7 +622,7 @@ static void modem_info_rsrp_subscribe_handler(void *context, char *response)
 	}
 
 	err = at_params_short_get(&m_param_list,
-				  modem_data[MODEM_INFO_RSRP]->param_index,
+				  rsrp_notify_data.param_index,
 				  &param_value);
 	if (err != 0) {
 		LOG_ERR("Failed to obtain RSRP value, %d", err);

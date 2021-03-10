@@ -1,13 +1,13 @@
 /*
  * Copyright (c) 2017 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #ifndef NRF_CLOUD_TRANSPORT_H__
 #define NRF_CLOUD_TRANSPORT_H__
 
-#include <nrf_cloud.h>
+#include <net/nrf_cloud.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,21 +36,24 @@ enum nct_cc_opcode {
 
 struct nct_dc_data {
 	struct nrf_cloud_data data;
-	u32_t id;
+	struct nrf_cloud_topic topic;
+	uint32_t id;
 };
 
 struct nct_cc_data {
 	struct nrf_cloud_data data;
-	u32_t id;
+	struct nrf_cloud_topic topic;
+	uint32_t id;
 	enum nct_cc_opcode opcode;
 };
 
 struct nct_evt {
-	u32_t status;
+	int32_t status;
 	union {
 		struct nct_cc_data *cc;
 		struct nct_dc_data *dc;
-		u32_t data_id;
+		uint32_t data_id;
+		uint8_t flag;
 	} param;
 	enum nct_evt_type type;
 };
@@ -110,6 +113,16 @@ void nct_dc_endpoint_get(struct nrf_cloud_data *tx_endpoint,
 
 /**@brief Needed for keep alive. */
 void nct_process(void);
+
+/**
+ * @brief Helper function to determine when next keep alive message should be
+ *        sent. Can be used for instance as a source for `poll` timeout.
+ *
+ * @return Time in milliseconds until next keep alive message is expected to
+ *         be sent.
+ * @return -1 if keep alive messages are not enabled.
+ */
+int nct_keepalive_time_left(void);
 
 /**@brief Input from the cloud module. */
 int nct_input(const struct nct_evt *evt);

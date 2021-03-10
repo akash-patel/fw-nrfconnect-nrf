@@ -226,14 +226,14 @@ ALIASES                = "rst=\verbatim embed:rst" \
                          "endrststar=\endverbatim" \
                          "r=\verbatim embed:rst:leading-asterisk" \
                          "er=\endverbatim"
-
-ALIASES 	       += "req=\xrefitem req \"Requirement\" \"Requirements\" "
+ALIASES += option{1}="\verbatim embed:rst:inline :option:`\1` \endverbatim"
+ALIASES += "req=\xrefitem req \"Requirement\" \"Requirements\" "
 
 # This tag can be used to specify a number of word-keyword mappings (TCL only).
 # A mapping has the form "name=value". For example adding "class=itcl::class"
 # will allow you to use the command class in the itcl::class meaning.
 
-TCL_SUBST              = YES
+TCL_SUBST              =
 
 # Set the OPTIMIZE_OUTPUT_FOR_C tag to YES if your project consists of C sources
 # only. Doxygen will then generate output that is more tailored for C. For
@@ -738,7 +738,7 @@ WARN_FORMAT            = "$file:$line: $text"
 # messages should be written. If left blank the output is written to standard
 # error (stderr).
 
-WARN_LOGFILE           = nrfxlib_warnings.txt
+WARN_LOGFILE           =
 
 #---------------------------------------------------------------------------
 # Configuration options related to the input files
@@ -802,7 +802,14 @@ EXCLUDE_SYMLINKS       = NO
 # Note that the wildcards are matched against the file with absolute path, so to
 # exclude all test directories for example use the pattern */test/*
 
-EXCLUDE_PATTERNS       =
+EXCLUDE_PATTERNS       = */zboss/* \
+                         */openthread/include/* \
+                         */openthread/lib/* \
+                         */nrf_cc312_platform/* \
+                         */nrf_cc312_mbedcrypto/* \
+                         */nrf_cc310_mbedcrypto/include/mbedtls_extra/* \
+                         */nrf_802154_sl/* \
+                         */nrf_cc310_mbedcrypto/include/nrf-config-cc310.h
 
 # The EXCLUDE_SYMBOLS tag can be used to specify one or more symbol names
 # (namespaces, classes, functions, etc.) that should be excluded from the
@@ -1016,7 +1023,7 @@ IGNORE_PREFIX          =
 # If the GENERATE_HTML tag is set to YES, doxygen will generate HTML output
 # The default value is: YES.
 
-GENERATE_HTML          = YES
+GENERATE_HTML          = NO
 
 # The HTML_OUTPUT tag is used to specify where the HTML docs will be put. If a
 # relative path is entered the value of OUTPUT_DIRECTORY will be put in front of
@@ -1946,7 +1953,7 @@ INCLUDE_FILE_PATTERNS  =
 
 PREDEFINED             = "MBEDTLS_CONFIG_FILE=\"@NRFXLIB_BINARY_DIR@/mbedtls_doxygen_config.h\"" \
                          "CONFIG_MBEDTLS_VANILLA_BACKEND=y" \
-                         "CONFIG_CC310_BACKEND=y" \
+                         "CONFIG_CC3XX_BACKEND=y" \
                          "CONFIG_SYS_CLOCK_EXISTS=y" \
                          "CONFIG_THREAD_MONITOR=y" \
                          "CONFIG_THREAD_CUSTOM_DATA=y" \
@@ -1962,10 +1969,11 @@ PREDEFINED             = "MBEDTLS_CONFIG_FILE=\"@NRFXLIB_BINARY_DIR@/mbedtls_dox
                          "NET_MGMT_DEFINE_REQUEST_HANDLER(x)=" \
                          "DEVICE_DEFINE()=" \
                          "DEVICE_AND_API_INIT()=" \
-                         "BUILD_ASSERT_MSG()=" \
+                         "BUILD_ASSERT()=" \
                          "BUILD_ASSERT()=" \
                          "__deprecated=" \
                          "__PACKED_STRUCT=struct" \
+                         "__PACKED_UNION=union" \
                          "__packed=" \
                          "__aligned(x)=" \
                          "__printf_like(x, y)=" \
@@ -1978,7 +1986,14 @@ PREDEFINED             = "MBEDTLS_CONFIG_FILE=\"@NRFXLIB_BINARY_DIR@/mbedtls_dox
 			 "CONFIG_BT_SCAN_NAME_CNT:=1" \
 			 "CONFIG_BT_SCAN_SHORT_NAME_CNT:=1" \
 			 "CONFIG_BT_SCAN_ADDRESS_CNT:=1" \
-			 "CONFIG_BT_SCAN_APPEARANCE_CNT:=1"
+			 "CONFIG_BT_SCAN_APPEARANCE_CNT:=1" \
+			 "NRF9160_XXAA=" \
+			 "NRF5340_XXAA_APPLICATION=" \
+			 "NRF52840_XXAA=" \
+			 "MBEDTLS_AES_C=" \
+			 "MBEDTLS_CCM_C=" \
+			 "MBEDTLS_GCM_C=" \
+			 "MBEDTLS_CONFIG_FILE="
 
 # If the MACRO_EXPANSION and EXPAND_ONLY_PREDEF tags are set to YES then this
 # tag can be used to specify a list of macro names that should be expanded. The
@@ -2045,12 +2060,6 @@ EXTERNAL_GROUPS        = YES
 
 EXTERNAL_PAGES         = YES
 
-# The PERL_PATH should be the absolute path and name of the perl script
-# interpreter (i.e. the result of 'which perl').
-# The default file (with absolute path) is: /usr/bin/perl.
-
-PERL_PATH              = /usr/bin/perl
-
 #---------------------------------------------------------------------------
 # Configuration options related to the dot tool
 #---------------------------------------------------------------------------
@@ -2063,15 +2072,6 @@ PERL_PATH              = /usr/bin/perl
 # The default value is: YES.
 
 CLASS_DIAGRAMS         = NO
-
-# You can define message sequence charts within doxygen comments using the \msc
-# command. Doxygen will then run the mscgen tool (see:
-# http://www.mcternan.me.uk/mscgen/)) to produce the chart and insert it in the
-# documentation. The MSCGEN_PATH tag allows you to specify the directory where
-# the mscgen tool resides. If left empty the tool is assumed to be found in the
-# default search path.
-
-MSCGEN_PATH            =
 
 # You can include diagrams made with dia in doxygen documentation. Doxygen will
 # then run dia to produce the diagram and insert it in the documentation. The

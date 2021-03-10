@@ -2,7 +2,7 @@
 #
 # Copyright (c) 2018 Nordic Semiconductor ASA
 #
-# SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 
 
 import hashlib
@@ -13,22 +13,22 @@ from intelhex import IntelHex
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Hash data from file.",
+        description='Hash data from file.',
         formatter_class=argparse.RawDescriptionHelpFormatter)
 
-    parser.add_argument("--infile", "-i", "--in", "-in", required=True,
-                        help="Hash the contents of the specified file. If a *.hex file is given, the contents will "
-                             "first be converted to binary. For all other file types, no conversion is done.")
+    parser.add_argument('--infile', '-i', '--in', '-in', required=True,
+                        help='Hash the contents of the specified file. If a *.hex file is given, the contents will '
+                             'first be converted to binary, with all non-specified area being set to 0xff. '
+                             'For all other file types, no conversion is done.')
     return parser.parse_args()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     args = parse_args()
 
     if args.infile.endswith('.hex'):
         ih = IntelHex(args.infile)
-        if len(ih) - 1 != (ih.maxaddr() - ih.minaddr()):
-            raise RuntimeError("Non-contiguous hex file not supported.")
+        ih.padding = 0xff  # Allows hashing with empty regions
         to_hash = ih.tobinstr()
     else:
         to_hash = open(args.infile, 'rb').read()

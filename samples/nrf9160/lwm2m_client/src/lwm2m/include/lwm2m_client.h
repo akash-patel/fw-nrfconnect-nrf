@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #ifndef LWM2M_CLIENT_H__
@@ -26,9 +26,10 @@ int lwm2m_init_device(char *serial_num);
 int lwm2m_init_location(void);
 
 #if defined(CONFIG_LWM2M_FIRMWARE_UPDATE_OBJ_SUPPORT)
-void *firmware_read_cb(u16_t obj_inst_id, size_t *data_len);
+void *firmware_read_cb(uint16_t obj_inst_id, size_t *data_len);
 int lwm2m_init_firmware(void);
 int lwm2m_init_image(void);
+int lwm2m_verify_modem_fw_update(void);
 #endif
 
 #if defined(CONFIG_LWM2M_CONN_MON_OBJ_SUPPORT)

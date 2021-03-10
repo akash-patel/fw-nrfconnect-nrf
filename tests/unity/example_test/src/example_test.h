@@ -1,12 +1,12 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 #ifndef EXAMPLE_TEST_H_
 #define EXAMPLE_TEST_H_
 
-#include <misc/util.h>
+#include <sys/util.h>
 #include <stdbool.h>
 
 /* This header shows how to handle testing of compile time options in a single

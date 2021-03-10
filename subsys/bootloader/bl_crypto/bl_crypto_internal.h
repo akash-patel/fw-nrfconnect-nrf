@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #ifndef BOOTLOADER_CRYPTO_INTERNAL_H__
@@ -18,11 +18,11 @@
  * @param[out] hash     Buffer to store hash in
  * @param[in]  data     Data to produce hash over
  * @param[in]  data_len Length of data to hash
- * @param[in]  external Whether this function is called through an ext_abi, in
+ * @param[in]  external Whether this function is called through an EXT_API, in
  *                      which case it can only use stack memory.
  *
  * @return 0 if success, error code otherwise.
  */
-int get_hash(u8_t *hash, const u8_t *data, u32_t data_len, bool external);
+int get_hash(uint8_t *hash, const uint8_t *data, uint32_t data_len, bool external);
 
 #endif

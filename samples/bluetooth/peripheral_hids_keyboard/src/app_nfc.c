@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #if CONFIG_NFC_OOB_PAIRING
@@ -10,14 +10,14 @@
 #include <nfc_t2t_lib.h>
 
 static struct bt_le_oob oob_local;
-static u8_t ndef_msg_buf[256]; /* Buffer used to hold an NFC NDEF message. */
+static uint8_t ndef_msg_buf[256]; /* Buffer used to hold an NFC NDEF message. */
 
 void nfc_field_detected(void);
 void nfc_field_lost(void);
 
 static void nfc_callback(void *context,
 			 enum nfc_t2t_event event,
-			 const u8_t *data,
+			 const uint8_t *data,
 			 size_t data_length)
 {
 	ARG_UNUSED(context);
@@ -36,30 +36,32 @@ static void nfc_callback(void *context,
 	}
 }
 
-int nfc_ndef_le_oob_msg_encode(u8_t *buffer, u32_t *len)
+int nfc_ndef_le_oob_msg_encode(uint8_t *buffer, uint32_t *len)
 {
 	int err;
-	struct nfc_ndef_le_oob_rec_payload_desc rec_payload_desc;
+	struct nfc_ndef_le_oob_rec_payload_desc rec_payload;
 
 	err = bt_le_oob_get_local(BT_ID_DEFAULT, &oob_local);
 	if (err) {
 		printk("Error while fetching local OOB data: %d\n", err);
 	}
 
-	memset(&rec_payload_desc, 0, sizeof(rec_payload_desc));
-	rec_payload_desc.oob_data = &oob_local;
-	rec_payload_desc.le_role = NFC_NDEF_LE_OOB_REC_LE_ROLE_PERIPH_ONLY;
-	rec_payload_desc.include.local_name = true;
-	rec_payload_desc.include.appearance = true;
-	rec_payload_desc.include.le_sc_data = true;
-	rec_payload_desc.include.flags = true;
-	rec_payload_desc.flags = BT_LE_AD_NO_BREDR;
+	memset(&rec_payload, 0, sizeof(rec_payload));
+
+	rec_payload.addr = &oob_local.addr;
+	rec_payload.le_sc_data = &oob_local.le_sc_data;
+	rec_payload.local_name = bt_get_name();
+	rec_payload.le_role = NFC_NDEF_LE_OOB_REC_LE_ROLE(
+		NFC_NDEF_LE_OOB_REC_LE_ROLE_PERIPH_ONLY);
+	rec_payload.appearance = NFC_NDEF_LE_OOB_REC_APPEARANCE(
+		CONFIG_BT_DEVICE_APPEARANCE);
+	rec_payload.flags = NFC_NDEF_LE_OOB_REC_FLAGS(BT_LE_AD_NO_BREDR);
 
 	/* Create NFC NDEF message description, capacity - 1 record */
 	NFC_NDEF_MSG_DEF(nfc_le_oob_msg, 1);
 
 	/* Create NFC NDEF LE OOB Record description without record ID field */
-	NFC_NDEF_LE_OOB_RECORD_DESC_DEF(nfc_le_oob_rec, 0, &rec_payload_desc);
+	NFC_NDEF_LE_OOB_RECORD_DESC_DEF(nfc_le_oob_rec, 0, &rec_payload);
 
 	/* Add LE OOB Record as lone record to message */
 	err = nfc_ndef_msg_record_add(&NFC_NDEF_MSG(nfc_le_oob_msg),
@@ -82,7 +84,7 @@ int nfc_ndef_le_oob_msg_encode(u8_t *buffer, u32_t *len)
 
 void app_nfc_init(void)
 {
-	u32_t len = sizeof(ndef_msg_buf);
+	uint32_t len = sizeof(ndef_msg_buf);
 
 	printk("NFC configuration start\n");
 

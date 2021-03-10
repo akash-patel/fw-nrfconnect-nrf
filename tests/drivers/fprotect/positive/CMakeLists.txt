@@ -1,11 +1,12 @@
 #
 # Copyright (c) 2018 Nordic Semiconductor ASA
 #
-# SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
-cmake_minimum_required(VERSION 3.8.2)
-include($ENV{ZEPHYR_BASE}/cmake/app/boilerplate.cmake NO_POLICY_SCOPE)
+cmake_minimum_required(VERSION 3.13.1)
+
+find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(NONE)
 
 FILE(GLOB app_sources src/*.c)

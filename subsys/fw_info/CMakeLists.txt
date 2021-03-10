@@ -1,12 +1,18 @@
 #
 # Copyright (c) 2018 Nordic Semiconductor ASA
 #
-# SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
-if (CONFIG_FW_INFO OR CONFIG_IS_SECURE_BOOTLOADER)
+if (CONFIG_FW_INFO)
   zephyr_library()
   zephyr_library_sources(fw_info.c)
+  zephyr_linker_sources(RODATA ext_apis.ld)
 endif ()
+
+zephyr_linker_sources_ifdef(CONFIG_FW_INFO
+  ROM_START
+  SORT_KEY ${CONFIG_FW_INFO_OFFSET}
+  fw_info.ld)
 
 # The following creates variables with the magic numbers used for firmware
 # metadata as comma-separated lists of numbers.
@@ -20,9 +26,9 @@ math(EXPR
   )
 
 set(FIRMWARE_INFO_MAGIC   "${CONFIG_FW_INFO_MAGIC_COMMON},${CONFIG_FW_INFO_MAGIC_FIRMWARE_INFO},${MAGIC_COMPATIBILITY_INFO}")
-set(ABI_INFO_MAGIC        "${CONFIG_FW_INFO_MAGIC_COMMON},${CONFIG_FW_INFO_MAGIC_ABI_INFO},${MAGIC_COMPATIBILITY_INFO}")
+set(EXT_API_MAGIC         "${CONFIG_FW_INFO_MAGIC_COMMON},${CONFIG_FW_INFO_MAGIC_EXT_API},${MAGIC_COMPATIBILITY_INFO}")
 
 zephyr_compile_definitions(
   FIRMWARE_INFO_MAGIC=${FIRMWARE_INFO_MAGIC}
-  ABI_INFO_MAGIC=${ABI_INFO_MAGIC}
+  EXT_API_MAGIC=${EXT_API_MAGIC}
   )

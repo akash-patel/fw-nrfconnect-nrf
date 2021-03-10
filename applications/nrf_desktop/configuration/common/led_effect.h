@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #ifndef _LED_EFFECT_H_
@@ -14,7 +14,7 @@
  */
 
 #include <zephyr/types.h>
-#include <misc/util.h>
+#include <sys/util.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -25,7 +25,7 @@ extern "C" {
  */
 struct led_color {
 	/** Values for color channels. */
-	u8_t c[CONFIG_DESKTOP_LED_COLOR_COUNT];
+	uint8_t c[CONFIG_DESKTOP_LED_COLOR_COUNT];
 };
 
 
@@ -40,10 +40,10 @@ struct led_effect_step {
 	struct led_color color;
 
 	/** Number of substeps. */
-	u16_t substep_count;
+	uint16_t substep_count;
 
 	/** Duration of a single substep. */
-	u16_t substep_time;
+	uint16_t substep_time;
 };
 
 
@@ -54,7 +54,7 @@ struct led_effect {
 	const struct led_effect_step *steps;
 
 	/** Number of steps for the given effect. */
-	u16_t step_count;
+	uint16_t step_count;
 
 	/** Flag that indicates if the sequence should start again after it finishes. */
 	bool loop_forever;
@@ -118,6 +118,40 @@ struct led_effect {
 /** Create LED turned off effect initializer.
  */
 #define LED_EFFECT_LED_OFF() LED_EFFECT_LED_ON(LED_NOCOLOR())
+
+
+/** Create LED turned on for a brief period effect initializer.
+ *
+ * LED color remains constant for a defined time, then goes off.
+ *
+ * @param _color      Selected LED color.
+ * @param _on_time    Time LED will remain on in milliseconds.
+ * @param _off_delay  Time in which LED will gradually switch to off
+ *                    (in milliseconds).
+ */
+#define LED_EFFECT_LED_ON_GO_OFF(_color, _on_time, _off_delay)			\
+	{									\
+		.steps = ((const struct led_effect_step[]) {			\
+			{							\
+				.color = _color,				\
+				.substep_count = 1,				\
+				.substep_time = 0,				\
+			},							\
+			{							\
+				.color = _color,				\
+				.substep_count = 1,				\
+				.substep_time = (_on_time),			\
+			},							\
+			{							\
+				.color = LED_NOCOLOR(),				\
+				.substep_count = (_off_delay)/10,		\
+				.substep_time = 10,				\
+			},							\
+		}),								\
+		.step_count = 3,						\
+		.loop_forever = false,						\
+	}
+
 
 
 /** Create LED blinking effect initializer.

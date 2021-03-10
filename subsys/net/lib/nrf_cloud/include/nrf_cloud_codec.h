@@ -1,13 +1,15 @@
 /*
  * Copyright (c) 2017 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #ifndef NRF_CLOUD_CODEC_H__
 #define NRF_CLOUD_CODEC_H__
 
-#include <nrf_cloud.h>
+#include <stdbool.h>
+
+#include <net/nrf_cloud.h>
 #include "nrf_cloud_fsm.h"
 
 #ifdef __cplusplus
@@ -36,7 +38,12 @@ int nrf_cloud_decode_data_endpoint(const struct nrf_cloud_data *input,
 				   struct nrf_cloud_data *m_endpoint);
 
 /** @brief Encodes state information. */
-int nrf_cloud_encode_state(u32_t reported_state, struct nrf_cloud_data *output);
+int nrf_cloud_encode_state(uint32_t reported_state, struct nrf_cloud_data *output);
+
+/** @brief Search input for config and encode response if necessary. */
+int nrf_cloud_encode_config_response(struct nrf_cloud_data const *const input,
+				     struct nrf_cloud_data *const output,
+				     bool *const has_config);
 
 #ifdef __cplusplus
 }

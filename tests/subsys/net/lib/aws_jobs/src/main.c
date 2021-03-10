@@ -1,14 +1,14 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 #include <string.h>
 #include <zephyr/types.h>
 #include <stdbool.h>
 #include <ztest.h>
 #include <aws_jobs.h>
-#include <net/mqtt_socket.h>
+#include <net/mqtt.h>
 
 int mqtt_subscribe(struct mqtt_client *client,
 		   const struct mqtt_subscription_list *param)

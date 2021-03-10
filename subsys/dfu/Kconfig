@@ -1,35 +1,13 @@
 #
-# Copyright (c) 2019 Nordic Semiconductor ASA
+# Copyright (c) 2020 Nordic Semiconductor ASA
 #
-# SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
-menuconfig DFU_TARGET
-	bool "Device Firmware Upgrade target API"
+menu "DFU"
 
-if (DFU_TARGET)
+rsource "dfu_target/Kconfig"
 
-config DFU_TARGET_MCUBOOT
-	bool "MCUBoot update support"
-	default y
-	depends on IMG_MANAGER
-	depends on BOOTLOADER_MCUBOOT
-	depends on IMG_ERASE_PROGRESSIVELY
-	imply MPU_ALLOW_FLASH_WRITE
-	help
-	  Enable support for updates that are performed by MCUboot.
+rsource "fmfu_fdev/Kconfig"
 
-
-config DFU_TARGET_MODEM
-	bool "Modem update support"
-	default y
-	depends on SOC_NRF9160_SICA
-	help
-	  Enable support for updates to the modem firmware.
-
-module=DFU_TARGET
-module-dep=LOG
-module-str=Device Firmware Upgrade
-source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
-
-endif # DFU_TARGET
+endmenu

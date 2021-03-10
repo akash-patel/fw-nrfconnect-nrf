@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #ifndef _HID_REPORT_DESC_H_
@@ -10,97 +10,52 @@
 #include <stddef.h>
 #include <zephyr/types.h>
 #include <toolchain/common.h>
+#include <sys/util.h>
+
+#include "hid_report_mouse.h"
+#include "hid_report_keyboard.h"
+#include "hid_report_system_ctrl.h"
+#include "hid_report_consumer_ctrl.h"
+#include "hid_report_user_config.h"
+
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define REPORT_SIZE_MOUSE		5 /* bytes */
-#define REPORT_SIZE_MOUSE_BOOT		3 /* bytes */
-#define REPORT_SIZE_KEYBOARD_KEYS	8 /* bytes */
-#define REPORT_SIZE_KEYBOARD_LEDS	1 /* bytes */
-#define REPORT_SIZE_CONSUMER_CTRL	2 /* bytes */
-#define REPORT_SIZE_USER_CONFIG		29 /* bytes */
-
-#define USAGE_PAGE_MOUSE_XY		0x01
-#define USAGE_PAGE_MOUSE_WHEEL		0x01
-#define USAGE_PAGE_KEYBOARD		0x07
-#define USAGE_PAGE_LEDS			0x08
-#define USAGE_PAGE_MOUSE_BUTTONS	0x09
-#define USAGE_PAGE_CONSUMER_CTRL	0x0C
-
-#define MOUSE_REPORT_WHEEL_MIN		(-0x7F)
-#define MOUSE_REPORT_WHEEL_MAX		(0x7F)
-#define MOUSE_REPORT_XY_MIN		(-0x07ff)
-#define MOUSE_REPORT_XY_MAX		(0x07ff)
-#define MOUSE_REPORT_XY_MIN_BOOT	(-0x80)
-#define MOUSE_REPORT_XY_MAX_BOOT	(0x7f)
-#define MOUSE_REPORT_BUTTON_COUNT_MAX	8
-
-#define KEYBOARD_REPORT_LAST_KEY	0x65 /* Keyboard Application */
-#define KEYBOARD_REPORT_FIRST_MODIFIER	0xE0 /* Keyboard Left Ctrl */
-#define KEYBOARD_REPORT_LAST_MODIFIER	0xE7 /* Keyboard Right GUI */
-#define KEYBOARD_REPORT_KEY_COUNT_MAX	6
-
-#define CONSUMER_CTRL_REPORT_KEY_COUNT_MAX	1
-
-#define IN_REPORT_LIST		\
-	X(MOUSE)		\
-	X(KEYBOARD_KEYS)	\
-	X(CONSUMER_CTRL)
-
-#define OUT_REPORT_LIST		\
-	X(KEYBOARD_LEDS)
-
-#define FEATURE_REPORT_LIST	\
-	X(USER_CONFIG)
-
-enum in_report {
-#define X(name) _CONCAT(IN_REPORT_, name),
-	IN_REPORT_LIST
-#undef X
-
-	IN_REPORT_COUNT
-};
-
-enum out_report {
-#define X(name) _CONCAT(OUT_REPORT_, name),
-	OUT_REPORT_LIST
-#undef X
-
-	OUT_REPORT_COUNT
-};
-
-enum feature_report {
-#define X(name) _CONCAT(FEATURE_REPORT_, name),
-	FEATURE_REPORT_LIST
-#undef X
-
-	FEATURE_REPORT_COUNT
-};
-
-
 enum report_id {
 	REPORT_ID_RESERVED,
 
-#define X(name) _CONCAT(REPORT_ID_, name),
-	IN_REPORT_LIST
-	OUT_REPORT_LIST
-	FEATURE_REPORT_LIST
-#undef X
+	REPORT_ID_MOUSE,
+	REPORT_ID_KEYBOARD_KEYS,
+	REPORT_ID_SYSTEM_CTRL,
+	REPORT_ID_CONSUMER_CTRL,
+
+	REPORT_ID_KEYBOARD_LEDS,
+
+	REPORT_ID_USER_CONFIG,
+	REPORT_ID_USER_CONFIG_OUT,
+
+	REPORT_ID_VENDOR_IN,
+	REPORT_ID_VENDOR_OUT,
+
+	REPORT_ID_BOOT_MOUSE,
+	REPORT_ID_BOOT_KEYBOARD,
 
 	REPORT_ID_COUNT
 };
 
-enum report_mode {
-	REPORT_MODE_PROTOCOL,
-	REPORT_MODE_BOOT,
-
-	REPORT_MODE_COUNT
+static const uint8_t input_reports[] = {
+	REPORT_ID_MOUSE,
+	REPORT_ID_KEYBOARD_KEYS,
+	REPORT_ID_SYSTEM_CTRL,
+	REPORT_ID_CONSUMER_CTRL,
+	REPORT_ID_BOOT_MOUSE,
+	REPORT_ID_BOOT_KEYBOARD,
 };
 
 
-extern const u8_t hid_report_desc[];
+extern const uint8_t hid_report_desc[];
 extern const size_t hid_report_desc_size;
 
 #ifdef __cplusplus

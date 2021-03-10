@@ -1,20 +1,21 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
-#include <gpio.h>
+#include <drivers/gpio.h>
 #include <init.h>
-#include <sensor.h>
+#include <drivers/sensor.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <logging/log.h>
 
 #include "sensor_sim.h"
 
-#if defined(CONFIG_SENSOR_SIM_DYNAMIC_VALUES)
-	#include <math.h>
+#include <math.h>
+#ifndef M_PI
+  #define M_PI 3.14159265358979323846
 #endif
 
 LOG_MODULE_REGISTER(sensor_sim, CONFIG_SENSOR_SIM_LOG_LEVEL);
@@ -22,12 +23,6 @@ LOG_MODULE_REGISTER(sensor_sim, CONFIG_SENSOR_SIM_LOG_LEVEL);
 static const double base_accel_samples[3] = {0.0, 0.0, 0.0};
 static double accel_samples[3];
 
-/* TODO: Make base sensor data configurable from Kconfig, along with more
- * detailed control over the sensor data data generation.
- */
-static const double base_temp_sample = 21.0;
-static const double base_humidity_sample = 52.0;
-static const double base_pressure_sample = 98.2;
 static double temp_sample;
 static double humidity_sample;
 static double pressure_sample;
@@ -53,19 +48,20 @@ static void double_to_sensor_value(double val,
  * @param cb Pointer to GPIO callback structure.
  * @param pins Pin mask for callback.
  */
-static void sensor_sim_gpio_callback(struct device *dev,
+static void sensor_sim_gpio_callback(const struct device *dev,
 				struct gpio_callback *cb,
-				u32_t pins)
+				uint32_t pins)
 {
 	ARG_UNUSED(pins);
 	struct sensor_sim_data *drv_data =
 		CONTAINER_OF(cb, struct sensor_sim_data, gpio_cb);
 
-	gpio_pin_disable_callback(dev, drv_data->gpio_pin);
+	gpio_pin_interrupt_configure(dev, drv_data->gpio_pin, GPIO_INT_DISABLE);
 	k_sem_give(&drv_data->gpio_sem);
 }
 #endif /* CONFIG_SENSOR_SIM_TRIGGER_USE_BUTTON */
 
+#if defined(CONFIG_SENSOR_SIM_TRIGGER)
 /*
  * @brief Function that runs in the sensor simulator thread when using trigger.
  *
@@ -74,13 +70,16 @@ static void sensor_sim_gpio_callback(struct device *dev,
 static void sensor_sim_thread(int dev_ptr)
 {
 	struct device *dev = INT_TO_POINTER(dev_ptr);
-	struct sensor_sim_data *drv_data = dev->driver_data;
+	struct sensor_sim_data *drv_data = dev->data;
 
 	while (true) {
-		if (IS_ENABLED(CONFIG_SENSOR_SIM_TRIGGER_USE_TIMER)) {
-			k_sleep(CONFIG_SENSOR_SIM_TRIGGER_TIMER_MSEC);
+		if (IS_ENABLED(CONFIG_SENSOR_SIM_TRIGGER_USE_TIMEOUT)) {
+			k_sleep(K_MSEC(CONFIG_SENSOR_SIM_TRIGGER_TIMEOUT_MSEC));
 		} else if (IS_ENABLED(CONFIG_SENSOR_SIM_TRIGGER_USE_BUTTON)) {
 			k_sem_take(&drv_data->gpio_sem, K_FOREVER);
+		} else {
+			/* Should not happen. */
+			__ASSERT_NO_MSG(false);
 		}
 
 		if (drv_data->drdy_handler != NULL) {
@@ -88,7 +87,8 @@ static void sensor_sim_thread(int dev_ptr)
 		}
 
 #if defined(CONFIG_SENSOR_SIM_TRIGGER_USE_BUTTON)
-		gpio_pin_enable_callback(drv_data->gpio, drv_data->gpio_pin);
+		gpio_pin_interrupt_configure(drv_data->gpio, drv_data->gpio_pin,
+					     GPIO_INT_EDGE_FALLING);
 #endif
 	}
 }
@@ -98,9 +98,9 @@ static void sensor_sim_thread(int dev_ptr)
  *
  * @param dev Pointer to device instance.
  */
-static int sensor_sim_init_thread(struct device *dev)
+static int sensor_sim_init_thread(const struct device *dev)
 {
-	struct sensor_sim_data *drv_data = dev->driver_data;
+	struct sensor_sim_data *drv_data = dev->data;
 
 #if defined(CONFIG_SENSOR_SIM_TRIGGER_USE_BUTTON)
 	drv_data->gpio = device_get_binding(drv_data->gpio_port);
@@ -111,9 +111,7 @@ static int sensor_sim_init_thread(struct device *dev)
 	}
 
 	gpio_pin_configure(drv_data->gpio, drv_data->gpio_pin,
-			   GPIO_DIR_IN | GPIO_INT | GPIO_INT_EDGE |
-			   GPIO_INT_ACTIVE_LOW | GPIO_INT_DEBOUNCE |
-			   GPIO_PUD_PULL_UP);
+			   GPIO_INPUT | GPIO_PULL_UP | GPIO_INT_DEBOUNCE);
 
 	gpio_init_callback(&drv_data->gpio_cb,
 			   sensor_sim_gpio_callback,
@@ -130,23 +128,25 @@ static int sensor_sim_init_thread(struct device *dev)
 
 	k_thread_create(&drv_data->thread, drv_data->thread_stack,
 			CONFIG_SENSOR_SIM_THREAD_STACK_SIZE,
-			(k_thread_entry_t)sensor_sim_thread, dev,
+			// TODO TORA: upmerge confirmation from Jan Tore needed.
+			(k_thread_entry_t)sensor_sim_thread, (void *)dev,
 			NULL, NULL,
 			K_PRIO_COOP(CONFIG_SENSOR_SIM_THREAD_PRIORITY),
-			0, 0);
+			0, K_NO_WAIT);
 
 	return 0;
 }
 
-static int sensor_sim_trigger_set(struct device *dev,
+static int sensor_sim_trigger_set(const struct device *dev,
 			   const struct sensor_trigger *trig,
 			   sensor_trigger_handler_t handler)
 {
 	int ret = 0;
-	struct sensor_sim_data *drv_data = dev->driver_data;
+	struct sensor_sim_data *drv_data = dev->data;
 
 #if defined(CONFIG_SENSOR_SIM_TRIGGER_USE_BUTTON)
-	gpio_pin_disable_callback(drv_data->gpio, drv_data->gpio_pin);
+	gpio_pin_interrupt_configure(drv_data->gpio, drv_data->gpio_pin,
+				     GPIO_INT_DISABLE);
 #endif
 
 	switch (trig->type) {
@@ -161,10 +161,12 @@ static int sensor_sim_trigger_set(struct device *dev,
 	}
 
 #if defined(CONFIG_SENSOR_SIM_TRIGGER_USE_BUTTON)
-	gpio_pin_enable_callback(drv_data->gpio, drv_data->gpio_pin);
+	gpio_pin_interrupt_configure(drv_data->gpio, drv_data->gpio_pin,
+				     GPIO_INT_EDGE_FALLING);
 #endif
 	return ret;
 }
+#endif /* CONFIG_SENSOR_SIM_TRIGGER */
 
 /*
  * @brief Initializes sensor simulator
@@ -173,14 +175,14 @@ static int sensor_sim_trigger_set(struct device *dev,
  *
  * @return 0 when successful or negative error code
  */
-static int sensor_sim_init(struct device *dev)
+static int sensor_sim_init(const struct device *dev)
 {
 #if defined(CONFIG_SENSOR_SIM_TRIGGER)
 #if defined(CONFIG_SENSOR_SIM_TRIGGER_USE_BUTTON)
-	struct sensor_sim_data *drv_data = dev->driver_data;
+	struct sensor_sim_data *drv_data = dev->data;
 
-	drv_data->gpio_port = SW0_GPIO_CONTROLLER;
-	drv_data->gpio_pin = SW0_GPIO_PIN;
+	drv_data->gpio_port = DT_GPIO_LABEL(DT_ALIAS(sw0), gpios);
+	drv_data->gpio_pin = DT_GPIO_PIN(DT_ALIAS(sw0), gpios);
 #endif
 	if (sensor_sim_init_thread(dev) < 0) {
 		LOG_ERR("Failed to initialize trigger interrupt");
@@ -209,9 +211,13 @@ static double generate_pseudo_random(void)
  */
 static double generate_sine(double offset, double amplitude)
 {
-	u32_t time = k_uptime_get_32();
+	/* Predefined period for generated sine function. */
+	static const uint32_t period_ms = 10000;
 
-	return offset + amplitude * sin(time % 65535);
+	double time = k_uptime_get_32() % period_ms;
+	double angle = 2 * M_PI * (time / period_ms);
+
+	return offset + amplitude * sin(angle);
 }
 
 /*
@@ -225,7 +231,7 @@ static int generate_accel_data(enum sensor_channel chan)
 	double max_variation = 20.0;
 	static int static_val_coeff = 1.0;
 
-	if (IS_ENABLED(CONFIG_SENSOR_SIM_DYNAMIC_VALUES)) {
+	if (IS_ENABLED(CONFIG_SENSOR_SIM_ACCEL_SINE)) {
 		switch (chan) {
 		case SENSOR_CHAN_ACCEL_X:
 			accel_samples[0] = generate_sine(base_accel_samples[0],
@@ -242,19 +248,17 @@ static int generate_accel_data(enum sensor_channel chan)
 		case SENSOR_CHAN_ACCEL_XYZ:
 			accel_samples[0] = generate_sine(base_accel_samples[0],
 								max_variation);
-			k_sleep(1);
+			k_sleep(K_MSEC(1));
 			accel_samples[1] = generate_sine(base_accel_samples[1],
 								max_variation);
-			k_sleep(1);
+			k_sleep(K_MSEC(1));
 			accel_samples[2] = generate_sine(base_accel_samples[2],
 								max_variation);
 			break;
 		default:
 			retval = -ENOTSUP;
 		}
-	}
-
-	if (IS_ENABLED(CONFIG_SENSOR_SIM_STATIC_VALUES)) {
+	} else if (IS_ENABLED(CONFIG_SENSOR_SIM_ACCEL_TOGGLE)) {
 		switch (chan) {
 		case SENSOR_CHAN_ACCEL_X:
 			accel_samples[0] = static_val_coeff * max_variation;
@@ -275,6 +279,9 @@ static int generate_accel_data(enum sensor_channel chan)
 		}
 
 		static_val_coeff *= -1.0;
+	} else {
+		/* Should not happen. */
+		__ASSERT_NO_MSG(false);
 	}
 
 	return retval;
@@ -285,7 +292,8 @@ static int generate_accel_data(enum sensor_channel chan)
  */
 static void generate_temp_data(void)
 {
-	temp_sample = base_temp_sample + generate_pseudo_random();
+	temp_sample = CONFIG_SENSOR_SIM_BASE_TEMPERATURE +
+		      generate_pseudo_random();
 }
 
 /**
@@ -293,7 +301,8 @@ static void generate_temp_data(void)
  */
 static void generate_humidity_data(void)
 {
-	humidity_sample = base_humidity_sample + generate_pseudo_random();
+	humidity_sample = CONFIG_SENSOR_SIM_BASE_HUMIDITY +
+			  generate_pseudo_random();
 }
 
 /**
@@ -301,7 +310,8 @@ static void generate_humidity_data(void)
  */
 static void generate_pressure_data(void)
 {
-	pressure_sample = base_pressure_sample + generate_pseudo_random();
+	pressure_sample = CONFIG_SENSOR_SIM_BASE_PRESSURE +
+			  generate_pseudo_random();
 }
 
 /*
@@ -313,17 +323,12 @@ static int sensor_sim_generate_data(enum sensor_channel chan)
 {
 	switch (chan) {
 	case SENSOR_CHAN_ACCEL_X:
-		generate_accel_data(SENSOR_CHAN_ACCEL_X);
-		break;
 	case SENSOR_CHAN_ACCEL_Y:
-		generate_accel_data(SENSOR_CHAN_ACCEL_Y);
-		break;
 	case SENSOR_CHAN_ACCEL_Z:
-		generate_accel_data(SENSOR_CHAN_ACCEL_Z);
-		break;
 	case SENSOR_CHAN_ACCEL_XYZ:
-		generate_accel_data(SENSOR_CHAN_ACCEL_XYZ);
+		generate_accel_data(chan);
 		break;
+
 	case SENSOR_CHAN_AMBIENT_TEMP:
 		generate_temp_data();
 		break;
@@ -340,7 +345,7 @@ static int sensor_sim_generate_data(enum sensor_channel chan)
 	return 0;
 }
 
-static int sensor_sim_attr_set(struct device *dev,
+static int sensor_sim_attr_set(const struct device *dev,
 		enum sensor_channel chan,
 		enum sensor_attribute attr,
 		const struct sensor_value *val)
@@ -348,13 +353,13 @@ static int sensor_sim_attr_set(struct device *dev,
 	return 0;
 }
 
-static int sensor_sim_sample_fetch(struct device *dev,
+static int sensor_sim_sample_fetch(const struct device *dev,
 				enum sensor_channel chan)
 {
 	return sensor_sim_generate_data(chan);
 }
 
-static int sensor_sim_channel_get(struct device *dev,
+static int sensor_sim_channel_get(const struct device *dev,
 				  enum sensor_channel chan,
 				  struct sensor_value *sample)
 {
@@ -400,6 +405,8 @@ static const struct sensor_driver_api sensor_sim_api_funcs = {
 #endif
 };
 
-DEVICE_AND_API_INIT(sensor_sim, CONFIG_SENSOR_SIM_DEV_NAME, sensor_sim_init,
-		    &sensor_sim_data, NULL, POST_KERNEL,
-		    CONFIG_SENSOR_INIT_PRIORITY, &sensor_sim_api_funcs);
+DEVICE_DEFINE(sensor_sim, CONFIG_SENSOR_SIM_DEV_NAME,
+	      sensor_sim_init, device_pm_control_nop,
+	      &sensor_sim_data, NULL,
+	      POST_KERNEL, CONFIG_SENSOR_INIT_PRIORITY,
+	      &sensor_sim_api_funcs);

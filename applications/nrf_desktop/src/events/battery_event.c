@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 
@@ -23,7 +23,7 @@ static int log_battery_state_event(const struct event_header *eh, char *buf,
 {
 	const struct battery_state_event *event = cast_battery_state_event(eh);
 
-	BUILD_ASSERT_MSG(ARRAY_SIZE(state_name) == BATTERY_STATE_COUNT,
+	BUILD_ASSERT(ARRAY_SIZE(state_name) == BATTERY_STATE_COUNT,
 			 "Invalid number of elements");
 
 	__ASSERT_NO_MSG(event->state < BATTERY_STATE_COUNT);
@@ -36,7 +36,6 @@ static void profile_battery_state_event(struct log_event_buf *buf,
 {
 	const struct battery_state_event *event = cast_battery_state_event(eh);
 
-	ARG_UNUSED(event);
 	profiler_log_encode_u32(buf, event->state);
 }
 
@@ -65,7 +64,6 @@ static void profile_battery_level_event(struct log_event_buf *buf,
 {
 	const struct battery_level_event *event = cast_battery_level_event(eh);
 
-	ARG_UNUSED(event);
 	profiler_log_encode_u32(buf, event->level);
 }
 

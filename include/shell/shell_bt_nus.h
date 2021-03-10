@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #ifndef SHELL_BT_NUS_H_
@@ -10,7 +10,7 @@
 #include <shell/shell.h>
 #include <bluetooth/conn.h>
 #include <bluetooth/services/nus.h>
-#include <ring_buffer.h>
+#include <sys/ring_buffer.h>
 
 /**
  * @file

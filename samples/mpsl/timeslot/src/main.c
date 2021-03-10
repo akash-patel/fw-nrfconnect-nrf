@@ -1,13 +1,13 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <kernel.h>
-#include <console.h>
+#include <console/console.h>
 #include <string.h>
-#include <misc/printk.h>
+#include <sys/printk.h>
 #include <zephyr/types.h>
 #include <irq.h>
 
@@ -17,11 +17,10 @@
 #define TIMESLOT_REQUEST_DISTANCE_US (1000000)
 #define TIMESLOT_LENGTH_US           (200)
 
-#define MPSL_THREAD_PRIO             CONFIG_MPSL_SIGNAL_THREAD_PRIO
-#define STACKSIZE                    CONFIG_IDLE_STACK_SIZE
+#define MPSL_THREAD_PRIO             CONFIG_MPSL_THREAD_COOP_PRIO
+#define STACKSIZE                    CONFIG_MAIN_STACK_SIZE
 #define THREAD_PRIORITY              K_LOWEST_APPLICATION_THREAD_PRIO
 
-static volatile int timeslot_counter;
 static bool request_in_cb = true;
 
 /* MPSL API calls that can be requested for the non-preemptible thread */
@@ -50,7 +49,7 @@ static mpsl_timeslot_request_t timeslot_request_normal = {
 static mpsl_timeslot_signal_return_param_t signal_callback_return_param;
 
 /* Message queue for printing the signal type from timeslot callback */
-K_MSGQ_DEFINE(callback_msgq, sizeof(u32_t), 10, 4);
+K_MSGQ_DEFINE(callback_msgq, sizeof(uint32_t), 10, 4);
 
 /* Message queue for requesting MPSL API calls to non-preemptible thread */
 K_MSGQ_DEFINE(mpsl_api_msgq, sizeof(enum mpsl_timeslot_call), 10, 4);
@@ -60,13 +59,16 @@ static void error(void)
 	printk("ERROR!\n");
 	while (true) {
 		/* Spin for ever */
-		k_sleep(1000);
+		k_sleep(K_MSEC(1000));
 	}
 }
 
 static mpsl_timeslot_signal_return_param_t *mpsl_timeslot_callback(
+	mpsl_timeslot_session_id_t session_id,
 	uint32_t signal_type)
 {
+	(void) session_id; /* unused parameter */
+
 	mpsl_timeslot_signal_return_param_t *p_ret_val = NULL;
 
 	switch (signal_type) {
@@ -91,10 +93,8 @@ static mpsl_timeslot_signal_return_param_t *mpsl_timeslot_callback(
 		break;
 	case MPSL_TIMESLOT_SIGNAL_SESSION_CLOSED:
 		break;
-	case MPSL_TIMESLOT_SIGNAL_CANCELLED:
-	case MPSL_TIMESLOT_SIGNAL_BLOCKED:
-	case MPSL_TIMESLOT_SIGNAL_INVALID_RETURN:
 	default:
+		printk("unexpected signal: %u", signal_type);
 		error();
 		break;
 	}
@@ -160,25 +160,30 @@ static void mpsl_nonpreemptible_thread(void)
 	int err;
 	enum mpsl_timeslot_call api_call = 0;
 
+	/* Initialize to invalid session id */
+	mpsl_timeslot_session_id_t session_id = 0xFFu;
+
 	while (1) {
 		if (k_msgq_get(&mpsl_api_msgq, &api_call, K_FOREVER) == 0) {
 			switch (api_call) {
 			case OPEN_SESSION:
 				err = mpsl_timeslot_session_open(
-					mpsl_timeslot_callback);
+					mpsl_timeslot_callback,
+					&session_id);
 				if (err) {
 					error();
 				}
 				break;
 			case MAKE_REQUEST:
 				err = mpsl_timeslot_request(
+					session_id,
 					&timeslot_request_earliest);
 				if (err) {
 					error();
 				}
 				break;
 			case CLOSE_SESSION:
-				err = mpsl_timeslot_session_close();
+				err = mpsl_timeslot_session_close(session_id);
 				if (err) {
 					error();
 				}
@@ -193,7 +198,7 @@ static void mpsl_nonpreemptible_thread(void)
 
 static void console_print_thread(void)
 {
-	u32_t signal_type = 0;
+	uint32_t signal_type = 0;
 
 	while (1) {
 		if (k_msgq_get(&callback_msgq, &signal_type, K_FOREVER) == 0) {
@@ -218,6 +223,7 @@ static void console_print_thread(void)
 
 void main(void)
 {
+
 	int err = console_init();
 
 	if (err) {
@@ -229,13 +235,13 @@ void main(void)
 
 	while (1) {
 		mpsl_timeslot_demo();
-		k_sleep(1000);
+		k_sleep(K_MSEC(1000));
 	}
 }
 
 K_THREAD_DEFINE(console_print_thread_id, STACKSIZE, console_print_thread,
-		NULL, NULL, NULL, THREAD_PRIORITY, 0, K_NO_WAIT);
+		NULL, NULL, NULL, THREAD_PRIORITY, 0, 0);
 
 K_THREAD_DEFINE(mpsl_nonpreemptible_thread_id, STACKSIZE,
 		mpsl_nonpreemptible_thread, NULL, NULL, NULL,
-		K_PRIO_COOP(CONFIG_MPSL_SIGNAL_THREAD_PRIO), 0, K_NO_WAIT);
+		K_PRIO_COOP(MPSL_THREAD_PRIO), 0, 0);

@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #ifndef _CONFIG_EVENT_H_
@@ -21,167 +21,160 @@ extern "C" {
 #endif
 
 
-/* Config event ID macros */
-#define GROUP_FIELD_POS		6
-#define GROUP_FIELD_SIZE	2
-#define GROUP_FIELD_MASK	BIT_MASK(GROUP_FIELD_SIZE)
-#define GROUP_FIELD_SET(group)	((group & GROUP_FIELD_MASK) << GROUP_FIELD_POS)
-#define GROUP_FIELD_GET(event_id) ((event_id >> GROUP_FIELD_POS) & GROUP_FIELD_MASK)
+/** @brief Config channel status list. */
+#define CONFIG_STATUS_LIST		\
+	X(PENDING)			\
+	X(GET_MAX_MOD_ID)		\
+	X(GET_HWID)			\
+	X(GET_BOARD_NAME)		\
+	X(INDEX_PEERS)			\
+	X(GET_PEER)			\
+	X(SET)				\
+	X(FETCH)			\
+	X(SUCCESS)			\
+	X(TIMEOUT)			\
+	X(REJECT)			\
+	X(WRITE_FAIL)			\
+	X(DISCONNECTED)
 
-#define TYPE_FIELD_POS		0
-#define TYPE_FIELD_SIZE		6
-#define TYPE_FIELD_MASK		BIT_MASK(TYPE_FIELD_SIZE)
-#define TYPE_FIELD_SET(type)	((type & TYPE_FIELD_MASK) << TYPE_FIELD_POS)
-#define TYPE_FIELD_GET(event_id) ((event_id >> TYPE_FIELD_POS) & TYPE_FIELD_MASK)
+enum config_status {
+#define X(name) _CONCAT(CONFIG_STATUS_, name),
+	CONFIG_STATUS_LIST
+#undef X
 
-#define CONFIG_EVENT_ID(group, type) ((u8_t)(GROUP_FIELD_SET(group) | \
-					     TYPE_FIELD_SET(type)))
+	CONFIG_STATUS_COUNT
+};
 
-#define EVENT_GROUP_SETUP	0x1
-#define EVENT_GROUP_DFU		0x2
-#define EVENT_GROUP_LED_STREAM	0x3
-
+/* Maximum length of fetched data. */
+#define CONFIG_CHANNEL_FETCHED_DATA_MAX_SIZE 16
 
 /* Config event, setup group macros */
 
-#define MOD_FIELD_POS		3
-#define MOD_FIELD_SIZE		3
+#define MOD_FIELD_POS		4
+#define MOD_FIELD_SIZE		4
 #define MOD_FIELD_MASK		BIT_MASK(MOD_FIELD_SIZE)
 #define MOD_FIELD_SET(module)	((module & MOD_FIELD_MASK) << MOD_FIELD_POS)
 #define MOD_FIELD_GET(event_id) ((event_id >> MOD_FIELD_POS) & MOD_FIELD_MASK)
 
 #define OPT_FIELD_POS		0
-#define OPT_FIELD_SIZE		3
+#define OPT_FIELD_SIZE		4
 #define OPT_FIELD_MASK		BIT_MASK(OPT_FIELD_SIZE)
 #define OPT_FIELD_SET(option)	((option & OPT_FIELD_MASK) << OPT_FIELD_POS)
 #define OPT_FIELD_GET(event_id) ((event_id >> OPT_FIELD_POS) & OPT_FIELD_MASK)
 
-#define SETUP_EVENT_ID(module, option) CONFIG_EVENT_ID(EVENT_GROUP_SETUP, \
-						       MOD_FIELD_SET(module) | OPT_FIELD_SET(option))
+#define OPT_ID_GET(opt_field)	(opt_field - 1)
 
-#define SETUP_MODULE_SENSOR	0x1
-#define SETUP_MODULE_QOS	0x2
-#define SETUP_MODULE_BLE_BOND	0x3
+/* Common module option macros */
+#define MODULE_OPT_MODULE_DESCR		0x0
 
+/* Character used to inform about end of module description. */
+#define MODULE_DESCR_END_CHAR '\n'
 
-/* Config event, setup group, sensor module macros */
-#define SENSOR_OPT_CPI			0x0
-#define SENSOR_OPT_DOWNSHIFT_RUN	0x1
-#define SENSOR_OPT_DOWNSHIFT_REST1	0x2
-#define SENSOR_OPT_DOWNSHIFT_REST2	0x3
-#define SENSOR_OPT_COUNT 4
+/* Description of the option representing module variant. */
+#define OPT_DESCR_MODULE_VARIANT "module_variant"
 
-/* Config event, setup group, qos module macros */
-#define QOS_OPT_BLACKLIST	0x0
-#define QOS_OPT_CHMAP		0x1
-#define QOS_OPT_PARAM_BLE	0x2
-#define QOS_OPT_PARAM_WIFI	0x3
-#define QOS_OPT_COUNT		4
-
-/* Config event, setup group, ble_bond module macros */
-#define BLE_BOND_PEER_ERASE	0x0
-#define BLE_BOND_PEER_SEARCH	0x1
-#define BLE_BOND_COUNT		2
-
-/* Config event, DFU group macros */
-#define DFU_START	0x0
-#define DFU_DATA	0x1
-#define DFU_SYNC	0x2
-#define DFU_REBOOT	0x3
-#define DFU_IMGINFO	0x4
-
-/* Config event, led stream group macros */
-#define LED_STREAM_DATA 0x0
+/* Configuration channel local recipient. */
+#define CFG_CHAN_RECIPIENT_LOCAL 0x00
 
 /** @brief Configuration channel event.
- * Used to change firmware parameters at runtime.
+ * Used to forward configuration channel request/response.
  */
 struct config_event {
 	struct event_header header;
 
-	u8_t id;
-	bool store_needed;
+	uint16_t transport_id;
+	bool is_request;
+
+	/* Data exchanged with host. */
+	uint8_t event_id;
+	uint8_t recipient;
+	uint8_t status;
 	struct event_dyndata dyndata;
 };
 
 EVENT_TYPE_DYNDATA_DECLARE(config_event);
 
-/** @brief Configuration channel fetch event.
- * Used to fetch firmware parameters to host.
- */
-struct config_fetch_event {
-	struct event_header header;
+extern const uint8_t __start_config_channel_modules[];
 
-	u16_t recipient;
-	u8_t id;
-	void *channel_id;
-	struct event_dyndata dyndata;
-};
-
-EVENT_TYPE_DYNDATA_DECLARE(config_fetch_event);
-
-/** @brief Configuration channel fetch request event.
- * Used to request fetching firmware parameters to host.
- */
-struct config_fetch_request_event {
-	struct event_header header;
-
-	u16_t recipient;
-	u8_t id;
-	void *channel_id;
-};
-
-EVENT_TYPE_DECLARE(config_fetch_request_event);
-
-enum config_status {
-	CONFIG_STATUS_SUCCESS,
-	CONFIG_STATUS_PENDING,
-	CONFIG_STATUS_FETCH,
-	CONFIG_STATUS_TIMEOUT,
-	CONFIG_STATUS_REJECT,
-	CONFIG_STATUS_WRITE_ERROR,
-	CONFIG_STATUS_DISCONNECTED_ERROR,
-};
-
-/** @brief Configuration channel forward event.
- * Used to pass configuration from dongle to connected devices.
- */
-struct config_forward_event {
-	struct event_header header;
-
-	u16_t recipient;
-	u8_t id;
-	enum config_status status;
-
-	struct event_dyndata dyndata;
-};
-
-EVENT_TYPE_DYNDATA_DECLARE(config_forward_event);
-
-/** @brief Configuration channel forward get event.
- * Used to forward configuration channel get request to connected devices.
- */
-struct config_forward_get_event {
-	struct event_header header;
-
-	u16_t recipient;
-	u8_t id;
-	void *channel_id;
-	enum config_status status;
-};
-
-EVENT_TYPE_DECLARE(config_forward_get_event);
-
-/** @brief Configuration channel forwarded event.
- * Used to confirm that event has been successfully forwarded.
- */
-struct config_forwarded_event {
-	struct event_header header;
-
-	enum config_status status;
-};
-
-EVENT_TYPE_DECLARE(config_forwarded_event);
+#define GEN_CONFIG_EVENT_HANDLERS(mod_name, opt_descr, config_set_fn, config_fetch_fn)		\
+	BUILD_ASSERT(ARRAY_SIZE(opt_descr) > 0);						\
+	BUILD_ASSERT(ARRAY_SIZE(opt_descr) <= OPT_FIELD_MASK);					\
+	if (IS_ENABLED(CONFIG_DESKTOP_CONFIG_CHANNEL_ENABLE) && is_config_event(eh)) {		\
+		static const uint8_t module_id_in_section					\
+			__attribute__((__section__("config_channel_modules"))) = 0;		\
+		uint8_t config_module_id =							\
+			&module_id_in_section - (uint8_t *)__start_config_channel_modules;	\
+		static uint8_t cur_opt_descr;							\
+												\
+		struct config_event *event = cast_config_event(eh);				\
+												\
+		uint8_t rsp_data_buf[CONFIG_CHANNEL_FETCHED_DATA_MAX_SIZE];			\
+		size_t rsp_data_size = 0;							\
+		bool consume = false;								\
+												\
+		/* Not for us. */								\
+		if (event->recipient != CFG_CHAN_RECIPIENT_LOCAL) {				\
+			return false;								\
+		}										\
+												\
+		if (event->status == CONFIG_STATUS_SET) {					\
+			if (MOD_FIELD_GET(event->event_id) == config_module_id) {		\
+				BUILD_ASSERT(config_set_fn != NULL); 				\
+				(*config_set_fn)(OPT_ID_GET(OPT_FIELD_GET(event->event_id)),	\
+						 event->dyndata.data,				\
+						 event->dyndata.size);				\
+				consume = true;							\
+			}									\
+		} else if (event->status == CONFIG_STATUS_FETCH) {				\
+			if (MOD_FIELD_GET(event->event_id) == config_module_id) {		\
+				if (OPT_FIELD_GET(event->event_id) == MODULE_OPT_MODULE_DESCR) {\
+					if (cur_opt_descr < ARRAY_SIZE(opt_descr) + 1) {	\
+						const char *data_ptr;				\
+												\
+						if (cur_opt_descr == 0) {			\
+							data_ptr = mod_name;			\
+						} else {					\
+							data_ptr = opt_descr[cur_opt_descr - 1];\
+						}						\
+						rsp_data_size = strlen(data_ptr);		\
+						__ASSERT_NO_MSG(rsp_data_size <=		\
+								sizeof(rsp_data_buf));		\
+						strncpy(rsp_data_buf, data_ptr, rsp_data_size);	\
+						cur_opt_descr++;				\
+					} else {						\
+						rsp_data_size = sizeof(uint8_t);		\
+						rsp_data_buf[0] = MODULE_DESCR_END_CHAR;	\
+						cur_opt_descr = 0;				\
+					}							\
+				} else {							\
+					BUILD_ASSERT(config_fetch_fn != NULL);			\
+					(*config_fetch_fn)(OPT_ID_GET(				\
+							      OPT_FIELD_GET(event->event_id)),	\
+							   rsp_data_buf,			\
+							   &rsp_data_size);			\
+				}								\
+				consume = true;							\
+			}									\
+		}										\
+												\
+		if (consume) {									\
+			struct config_event *rsp = new_config_event(rsp_data_size);		\
+												\
+			rsp->transport_id = event->transport_id;				\
+			rsp->recipient = event->recipient;					\
+			rsp->event_id = event->event_id;					\
+			rsp->status = CONFIG_STATUS_SUCCESS;					\
+			rsp->is_request = false;						\
+												\
+			if (rsp_data_size > 0) {						\
+				memcpy(rsp->dyndata.data, rsp_data_buf, rsp_data_size);		\
+			}									\
+												\
+			EVENT_SUBMIT(rsp);							\
+		}										\
+												\
+		return consume;									\
+	}
 
 #ifdef __cplusplus
 }

@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 /** @file
@@ -32,10 +32,10 @@ static const struct bt_data ad[] = {
 };
 
 static const struct bt_data sd[] = {
-	BT_DATA_BYTES(BT_DATA_UUID128_ALL, NUS_UUID_SERVICE),
+	BT_DATA_BYTES(BT_DATA_UUID128_ALL, BT_UUID_NUS_VAL),
 };
 
-static void connected(struct bt_conn *conn, u8_t err)
+static void connected(struct bt_conn *conn, uint8_t err)
 {
 	if (err) {
 		LOG_ERR("Connection failed (err %u)", err);
@@ -47,7 +47,7 @@ static void connected(struct bt_conn *conn, u8_t err)
 	shell_bt_nus_enable(conn);
 }
 
-static void disconnected(struct bt_conn *conn, u8_t reason)
+static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
 	LOG_INF("Disconnected (reason %u)", reason);
 
@@ -156,4 +156,3 @@ void main(void)
 	LOG_INF("Bluetooth ready. Advertising started.");
 
 }
-

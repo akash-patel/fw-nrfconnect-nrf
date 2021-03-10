@@ -1,7 +1,7 @@
 #
 # Copyright (c) 2019 Nordic Semiconductor ASA
 #
-# SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
 menuconfig BT_GATT_DM
@@ -16,12 +16,6 @@ config BT_GATT_DM_MAX_ATTRS
 	default 35
 	help
 	  Maximum number of attributes that can be present in the discovered service.
-
-config BT_GATT_DM_MAX_MEM_CHUNKS
-	int "Maximum number of allocated memory chunks containing GATT attribute data"
-	default 6
-	help
-	  Maximum number of allocated memory blocks containing GATT attribute data.
 
 config BT_GATT_DM_DATA_PRINT
 	bool "Enable functions for printing discovery related data"

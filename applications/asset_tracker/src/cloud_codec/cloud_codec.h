@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 /**@file
  *
@@ -38,6 +38,8 @@ enum cloud_channel {
 	CLOUD_CHANNEL_RGB_LED,
 	/** The BUZZER on the device. */
 	CLOUD_CHANNEL_BUZZER,
+	/** The environmental sensors channel. */
+	CLOUD_CHANNEL_ENVIRONMENT,
 	/** The TEMP sensor on the device. */
 	CLOUD_CHANNEL_TEMP,
 	/** The Humidity sensor on the device. */
@@ -62,6 +64,8 @@ enum cloud_channel {
 	CLOUD_CHANNEL_LIGHT_IR,
 	/** The assisted GPS channel. */
 	CLOUD_CHANNEL_ASSISTED_GPS,
+	/** The modem channel. */
+	CLOUD_CHANNEL_MODEM,
 
 	CLOUD_CHANNEL__TOTAL
 };
@@ -69,15 +73,13 @@ enum cloud_channel {
 #define CLOUD_CHANNEL_STR_GPS "GPS"
 #define CLOUD_CHANNEL_STR_FLIP "FLIP"
 #define CLOUD_CHANNEL_STR_BUTTON "BUTTON"
+#define CLOUD_CHANNEL_STR_ENVIRONMENT "ENV"
 #define CLOUD_CHANNEL_STR_TEMP "TEMP"
 #define CLOUD_CHANNEL_STR_HUMID "HUMID"
 #define CLOUD_CHANNEL_STR_AIR_PRESS "AIR_PRESS"
 #define CLOUD_CHANNEL_STR_AIR_QUAL "AIR_QUAL"
 #define CLOUD_CHANNEL_STR_LTE_LINK_RSRP "RSRP"
-/* The "device" is intended for the shadow, which expects its objects
- * to have lowercase keys.
- */
-#define CLOUD_CHANNEL_STR_DEVICE_INFO "device"
+#define CLOUD_CHANNEL_STR_DEVICE_INFO "DEVICE"
 #define CLOUD_CHANNEL_STR_LIGHT_SENSOR "LIGHT"
 #define CLOUD_CHANNEL_STR_LIGHT_RED "LIGHT_RED"
 #define CLOUD_CHANNEL_STR_LIGHT_GREEN "LIGHT_GREEN"
@@ -85,6 +87,7 @@ enum cloud_channel {
 #define CLOUD_CHANNEL_STR_LIGHT_IR "LIGHT_IR"
 #define CLOUD_CHANNEL_STR_ASSISTED_GPS "AGPS"
 #define CLOUD_CHANNEL_STR_RGB_LED "LED"
+#define CLOUD_CHANNEL_STR_MODEM "MODEM"
 
 struct cloud_data {
 	char *buf;
@@ -100,7 +103,9 @@ struct cloud_channel_data {
 	/** Unique tag to identify the sent data.
 	 *  Useful for matching the acknowledgment.
 	 */
-	u32_t tag;
+	uint32_t tag;
+	/** Uptime of the sensor data to be transmitted. */
+	int64_t ts;
 };
 
 enum cloud_cmd_group {
@@ -114,6 +119,7 @@ enum cloud_cmd_group {
 	CLOUD_CMD_GROUP_OK,
 	CLOUD_CMD_GROUP_CFG_SET,
 	CLOUD_CMD_GROUP_CFG_GET,
+	CLOUD_CMD_GROUP_COMMAND,
 
 	CLOUD_CMD_GROUP__TOTAL
 };
@@ -128,6 +134,7 @@ enum cloud_cmd_group {
 #define CLOUD_CMD_GROUP_STR_OK "OK"
 #define CLOUD_CMD_GROUP_STR_CFG_SET "CFG_SET"
 #define CLOUD_CMD_GROUP_STR_CFG_GET "CFG_GET"
+#define CLOUD_CMD_GROUP_STR_COMMAND "CMD"
 
 enum cloud_cmd_type {
 	CLOUD_CMD_EMPTY,
@@ -137,6 +144,7 @@ enum cloud_cmd_type {
 	CLOUD_CMD_INTERVAL,
 	CLOUD_CMD_COLOR,
 	CLOUD_CMD_MODEM_PARAM,
+	CLOUD_CMD_DATA_STRING,
 
 	CLOUD_CMD__TOTAL
 };
@@ -154,6 +162,8 @@ enum cloud_cmd_state {
 #define CLOUD_CMD_TYPE_STR_INTERVAL "interval"
 #define CLOUD_CMD_TYPE_STR_COLOR "color"
 #define CLOUD_CMD_TYPE_STR_MODEM_PARAM "modemParams"
+#define CLOUD_CMD_TYPE_STR_DATA_STRING "data_string"
+
 
 #define MODEM_PARAM_BLOB_KEY_STR "blob"
 #define MODEM_PARAM_CHECKSUM_KEY_STR "checksum"
@@ -177,6 +187,7 @@ struct cloud_command {
 	union {
 		struct cloud_command_state_value sv;
 		struct cloud_command_modem_params mp;
+		char *data_string;
 	} data;
 };
 
@@ -186,17 +197,18 @@ typedef void (*cloud_cmd_cb_t)(struct cloud_command *cmd);
  * @brief Encode cloud data.
  *
  * @param channel The cloud channel type.
+ * @param group The channel data's group.
  * @param output Pointer to the cloud data output.
  *
  * @return 0 if the operation was successful, otherwise a (negative) error code.
  */
 int cloud_encode_data(const struct cloud_channel_data *channel,
-		      struct cloud_msg *output);
+	const enum cloud_cmd_group group, struct cloud_msg *output);
 
 /**
  * @brief Decode cloud data.
  *
- * @param output Pointer to the cloud data input.
+ * @param input Pointer to the cloud data input.
  *
  * @return 0 if the operation was successful, otherwise a (negative) error code.
  */
@@ -212,17 +224,38 @@ int cloud_decode_command(char const *input);
 int cloud_decode_init(cloud_cmd_cb_t cb);
 
 /**
- * @brief Encode data to be transmitted to the digital twin,
- *	  from sensor data structure to a cloud data structure
- *	  containing a JSON string.
+ * @brief Encode device status data to be transmitted to the
+ *        digital twin.
  *
- * @param sensor Pointer to sensor data.
+ * @param modem_param Pointer to optional modem parameter data.
+ * @param ui Pointer to array of cloud data channel name
+ *           strings.
+ * @param ui_count Size of the ui array.
+ * @param fota Pointer to array of FOTA services.
+ * @param fota_count Size of the fota array.
+ * @param fota_version Version of the FOTA service.
  * @param output Pointer to encoded data structure.
  *
- * @return 0 if the operation was successful, otherwise a (negative) error code.
+ * @return 0 if the operation was successful, otherwise a
+ *         (negative) error code.
  */
-int cloud_encode_digital_twin_data(const struct cloud_channel_data *channel,
-				   struct cloud_msg *output);
+int cloud_encode_device_status_data(
+	void *modem_param,
+	const char *const ui[], const uint32_t ui_count,
+	const char *const fota[], const uint32_t fota_count,
+	const uint16_t fota_version,
+	struct cloud_msg *output);
+
+/**
+ * @brief Encode device config data to be transmitted to the
+ *        shadow/digital twin.
+ *
+ * @param output Pointer to encoded data structure.
+ *
+ * @return 0 if the operation was successful, otherwise a
+ *         (negative) error code.
+ */
+int cloud_encode_config_data(struct cloud_msg *output);
 
 /**
  * @brief Releases memory used by cloud data structure.
@@ -250,13 +283,34 @@ int cloud_encode_light_sensor_data(const struct light_sensor_data *sensor_data,
 /**
  * @brief Checks if data could be sent to the cloud based on config.
  *
- * @param channel The cloud channel type..
+ * @param channel The cloud channel type.
  * @param value Current data value for channel.
  *
  * @return true If the data should be sent to the cloud.
  */
 bool cloud_is_send_allowed(const enum cloud_channel channel,
 			   const double value);
+
+/**
+ * @brief Gets the enable state of the specified cloud channel.
+ *
+ * @param channel The cloud channel type.
+ *
+ * @return cloud_cmd_state The enable state.
+ */
+enum cloud_cmd_state cloud_get_channel_enable_state(
+				  const enum cloud_channel channel);
+
+/**
+ * @brief Sets the enable state of the specified cloud channel.
+ *
+ * @param channel The cloud channel type.
+ * @param state   The desired enable state.
+ */
+void cloud_set_channel_enable_state(
+				  const enum cloud_channel channel,
+				  const enum cloud_cmd_state state);
+
 /**
  * @}
  */

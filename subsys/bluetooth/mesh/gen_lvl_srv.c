@@ -1,17 +1,20 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <string.h>
 #include <bluetooth/mesh/gen_lvl_srv.h>
 #include <bluetooth/mesh/gen_dtt_srv.h>
+#include <bluetooth/mesh/scene_srv.h>
+#include <sys/byteorder.h>
 #include "model_utils.h"
 
 static void encode_status(const struct bt_mesh_lvl_status *status,
 			  struct net_buf_simple *buf)
 {
+	bt_mesh_model_msg_init(buf, BT_MESH_LVL_OP_STATUS);
 	net_buf_simple_add_le16(buf, status->current);
 
 	if (status->remaining_time == 0) {
@@ -39,7 +42,6 @@ static void rsp_status(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 {
 	BT_MESH_MODEL_BUF_DEFINE(rsp, BT_MESH_LVL_OP_STATUS,
 				 BT_MESH_LVL_MSG_MAXLEN_STATUS);
-	bt_mesh_model_msg_init(&rsp, BT_MESH_LVL_OP_STATUS);
 	encode_status(status, &rsp);
 
 	bt_mesh_model_send(model, ctx, &rsp, NULL, 0);
@@ -81,6 +83,10 @@ static void set(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 
 	srv->handlers->set(srv, ctx, &set, &status);
 
+	if (IS_ENABLED(CONFIG_BT_MESH_SCENE_SRV)) {
+		bt_mesh_scene_invalidate(&srv->scene);
+	}
+
 	if (ack) {
 		rsp_status(model, ctx, &status);
 	}
@@ -109,6 +115,10 @@ static void delta_set(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 
 	srv->handlers->delta_set(srv, ctx, &delta_set, &status);
 
+	if (IS_ENABLED(CONFIG_BT_MESH_SCENE_SRV)) {
+		bt_mesh_scene_invalidate(&srv->scene);
+	}
+
 	if (ack) {
 		rsp_status(model, ctx, &status);
 	}
@@ -135,7 +145,19 @@ static void move_set(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 	transition_get(srv, &transition, buf);
 	move_set.transition = &transition;
 
+	/* If transition.time is 0, we shouldn't move. Align these two
+	 * parameters to simplify application logic for this case:
+	 */
+	if (move_set.transition->time == 0 || move_set.delta == 0) {
+		move_set.delta = 0;
+		transition.time = 0;
+	}
+
 	srv->handlers->move_set(srv, ctx, &move_set, &status);
+
+	if (IS_ENABLED(CONFIG_BT_MESH_SCENE_SRV)) {
+		bt_mesh_scene_invalidate(&srv->scene);
+	}
 
 	if (ack) {
 		rsp_status(model, ctx, &status);
@@ -203,39 +225,86 @@ const struct bt_mesh_model_op _bt_mesh_lvl_srv_op[] = {
 	BT_MESH_MODEL_OP_END,
 };
 
-static int bt_mesh_lvl_srv_init(struct bt_mesh_model *model)
+static int scene_store(struct bt_mesh_model *mod, uint8_t data[])
 {
-	struct bt_mesh_lvl_srv *srv = model->user_data;
+	struct bt_mesh_lvl_srv *srv = mod->user_data;
+	struct bt_mesh_lvl_status status = { 0 };
 
-	srv->model = model;
-	net_buf_simple_init(model->pub->msg, 0);
+	srv->handlers->get(srv, NULL, &status);
+	sys_put_le16(status.remaining_time ? status.target : status.current,
+		     &data[0]);
 
-	return 0;
+	return 2;
 }
 
-const struct bt_mesh_model_cb _bt_mesh_lvl_srv_cb = {
-	.init = bt_mesh_lvl_srv_init,
+static void scene_recall(struct bt_mesh_model *mod, const uint8_t data[],
+			 size_t len,
+			 struct bt_mesh_model_transition *transition)
+{
+	struct bt_mesh_lvl_srv *srv = mod->user_data;
+	struct bt_mesh_lvl_set set = {
+		.lvl = sys_get_le16(data),
+		.new_transaction = true,
+		.transition = transition,
+	};
+
+	srv->handlers->set(srv, NULL, &set, NULL);
+}
+
+static const struct bt_mesh_scene_entry_type scene_type = {
+	.maxlen = 2,
+	.store = scene_store,
+	.recall = scene_recall,
 };
 
-int _bt_mesh_lvl_srv_update_handler(struct bt_mesh_model *model)
+static int update_handler(struct bt_mesh_model *model)
 {
 	struct bt_mesh_lvl_srv *srv = model->user_data;
 	struct bt_mesh_lvl_status status = { 0 };
 
 	srv->handlers->get(srv, NULL, &status);
-
-	bt_mesh_model_msg_init(model->pub->msg, BT_MESH_LVL_OP_STATUS);
 	encode_status(&status, model->pub->msg);
+
 	return 0;
 }
+
+static int bt_mesh_lvl_srv_init(struct bt_mesh_model *model)
+{
+	struct bt_mesh_lvl_srv *srv = model->user_data;
+
+	srv->model = model;
+	srv->pub.msg = &srv->pub_buf;
+	srv->pub.update = update_handler;
+	net_buf_simple_init_with_data(&srv->pub_buf, srv->pub_data,
+				      sizeof(srv->pub_data));
+
+	if (IS_ENABLED(CONFIG_BT_MESH_SCENE_SRV)) {
+		bt_mesh_scene_entry_add(model, &srv->scene, &scene_type, false);
+	}
+
+	return 0;
+}
+
+static void bt_mesh_lvl_srv_reset(struct bt_mesh_model *model)
+{
+	net_buf_simple_reset(model->pub->msg);
+}
+
+const struct bt_mesh_model_cb _bt_mesh_lvl_srv_cb = {
+	.init = bt_mesh_lvl_srv_init,
+	.reset = bt_mesh_lvl_srv_reset,
+};
 
 int bt_mesh_lvl_srv_pub(struct bt_mesh_lvl_srv *srv,
 			struct bt_mesh_msg_ctx *ctx,
 			const struct bt_mesh_lvl_status *status)
 {
+	if (!srv->pub.addr) {
+		return 0;
+	}
+
 	BT_MESH_MODEL_BUF_DEFINE(msg, BT_MESH_LVL_OP_STATUS,
 				 BT_MESH_LVL_MSG_MAXLEN_STATUS);
-	bt_mesh_model_msg_init(&msg, BT_MESH_LVL_OP_STATUS);
 	encode_status(status, &msg);
 
 	return model_send(srv->model, ctx, &msg);

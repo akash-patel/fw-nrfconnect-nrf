@@ -1,6 +1,9 @@
+nRF Connect SDK: sdk-nrf
+########################
 
-nRF Connect SDK: fw-nrfconnect-nrf
-##################################
+.. contents::
+   :local:
+   :depth: 2
 
 This repository contains the Nordic-specific source code additions to open
 source projects (Zephyr RTOS and MCUboot).
@@ -8,10 +11,10 @@ It must be combined with nrfxlib and the repositories that use the same
 naming convention to build the provided samples and to use the additional
 subsystems and libraries.
 
-The following repositories must be combined with fw-nrfconnect-nrf:
+The following repositories must be combined with sdk-nrf:
 
-* fw-nrfconnect-zephyr
-* fw-nrfconnect-mcuboot
+* sdk-zephyr
+* sdk-mcuboot
 * nrfxlib
 
 Documentation
@@ -26,8 +29,5 @@ Disclaimer
 **********
 
 nRF Connect SDK supports development with nRF9160 Cellular IoT devices.
-It is also your starting point for developing Bluetooth Low Energy
-applications on the nRF5340, though support for nRF5340 is still experimental.
-It contains references and code for Bluetooth Low Energy devices in the
-nRF52 Series, though development on these devices is not currently supported
-with the nRF Connect SDK.
+nRF53 Series devices (which are pre-production) and Zigbee and Bluetooth mesh protocols are supported for development in v1.4.2 for prototyping and evaluation.
+Support for production and deployment in end products is coming soon.

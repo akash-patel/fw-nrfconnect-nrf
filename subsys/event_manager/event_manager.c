@@ -1,17 +1,23 @@
 /*
  * Copyright (c) 2018 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <stdio.h>
 #include <zephyr.h>
 #include <spinlock.h>
-#include <misc/slist.h>
+#include <sys/slist.h>
 #include <event_manager.h>
 #include <logging/log.h>
 
 LOG_MODULE_REGISTER(event_manager, CONFIG_DESKTOP_EVENT_MANAGER_LOG_LEVEL);
+
+
+/* Event manager uses orphan sections. Below tag will allow linker to
+ * find a section usable to put the orphan sections next to.
+ */
+const struct {} linker_tag __attribute__((__section__("event_manager"))) __used;
 
 
 static void event_processor_fn(struct k_work *work);
@@ -24,12 +30,12 @@ static void event_processor_fn(struct k_work *work);
 #endif
 
 #ifdef CONFIG_SHELL
-extern u32_t event_manager_displayed_events;
+extern uint32_t event_manager_displayed_events;
 #else
-static u32_t event_manager_displayed_events;
+static uint32_t event_manager_displayed_events;
 #endif
 
-static u16_t profiler_event_ids[IDS_COUNT];
+static uint16_t profiler_event_ids[IDS_COUNT];
 static K_WORK_DEFINE(event_processor, event_processor_fn);
 static sys_slist_t eventq = SYS_SLIST_STATIC_INIT(&eventq);
 static struct k_spinlock lock;
@@ -37,7 +43,7 @@ static struct k_spinlock lock;
 
 static bool log_is_event_displayed(const struct event_type *et)
 {
-	u32_t event_mask = BIT(et - __start_event_types);
+	uint32_t event_mask = BIT(et - __start_event_types);
 	return event_manager_displayed_events & event_mask;
 }
 
@@ -58,13 +64,18 @@ static void log_event(const struct event_header *eh)
 		if (pos < 0) {
 			log_buf[0] = '\0';
 		} else if (pos >= sizeof(log_buf)) {
-			BUILD_ASSERT_MSG(sizeof(log_buf) >= 2,
+			BUILD_ASSERT(sizeof(log_buf) >= 2,
 					 "Buffer invalid");
 			log_buf[sizeof(log_buf) - 2] = '~';
 		}
 
-		LOG_INF("e: %s %s", et->name, log_strdup(log_buf));
-	} else {
+		if (IS_ENABLED(CONFIG_DESKTOP_EVENT_MANAGER_LOG_EVENT_TYPE)) {
+			LOG_INF("e: %s %s", et->name, log_strdup(log_buf));
+		} else {
+			LOG_INF("%s", log_strdup(log_buf));
+		}
+
+	} else if (IS_ENABLED(CONFIG_DESKTOP_EVENT_MANAGER_LOG_EVENT_TYPE)) {
 		LOG_INF("e: %s", et->name);
 	}
 }
@@ -102,7 +113,7 @@ static void log_event_init(void)
 	     (et != NULL) && (et != __stop_event_types);
 	     et++) {
 		if (et->init_log_enable) {
-			u32_t event_mask = BIT(et - __start_event_types);
+			uint32_t event_mask = BIT(et - __start_event_types);
 			event_manager_displayed_events |= event_mask;
 		}
 	}
@@ -163,7 +174,7 @@ static void trace_register_execution_tracking_events(void)
 	const char *labels[] = {"mem_address"};
 	enum profiler_arg types[] = {PROFILER_ARG_U32};
 	size_t event_cnt = __stop_event_types - __start_event_types;
-	u16_t profiler_event_id;
+	uint16_t profiler_event_id;
 
 	ARG_UNUSED(types);
 	ARG_UNUSED(labels);
@@ -188,7 +199,7 @@ static void trace_register_events(void)
 	     et++) {
 		if (et->ev_info) {
 			size_t event_idx = et - __start_event_types;
-			u16_t profiler_event_id;
+			uint16_t profiler_event_id;
 
 			profiler_event_id = profiler_register_event_type(
 				et->name, et->ev_info->log_arg_labels,

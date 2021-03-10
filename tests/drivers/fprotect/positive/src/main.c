@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019 Nordic Semiconductor ASA
  *
- * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 /* This test checks if fprotect have been set up correctly and is able to
@@ -13,49 +13,59 @@
 
 #include <ztest.h>
 #include <device.h>
-#include <flash.h>
+#include <drivers/flash.h>
 
-static u8_t write_data[] = "Hello world";
-static u32_t valid_write_addr = 0x1C000;
+static uint8_t write_data[] = "Hello World";
+static uint32_t valid_write_addr = 0x1C000;
+static uint32_t control_read_addr = 0x6032;
+static uint8_t read_data_before[sizeof(write_data)];
+static uint8_t read_data_after[sizeof(write_data)];
+
+#define SOC_NV_FLASH_CONTROLLER_NODE DT_NODELABEL(flash_controller)
+#define FLASH_DEV_NAME DT_LABEL(SOC_NV_FLASH_CONTROLLER_NODE)
 
 static void test_flash_write(void)
 {
-	int retval = 0;
-	struct device *flash_dev = device_get_binding(DT_FLASH_DEV_NAME);
+	const struct device *flash_dev = device_get_binding(FLASH_DEV_NAME);
+	int retval = flash_read(flash_dev, control_read_addr, read_data_before,
+				ARRAY_SIZE(read_data_before));
+
+	zassert_true(retval == 0, "flash_read failed");
 	(void) flash_write_protection_set(flash_dev, false);
-	retval = flash_write(flash_dev, valid_write_addr, write_data, ARRAY_SIZE(write_data));
+	retval = flash_write(flash_dev, valid_write_addr, write_data,
+			     ARRAY_SIZE(write_data));
 	zassert_true(retval == 0, "flash_write failed");
 }
 
 static void test_flash_read(void)
 {
 	int retval = 0;
-	u8_t read_data[strlen(write_data)+1];
-	struct device *flash_dev = device_get_binding(DT_FLASH_DEV_NAME);
-	retval = flash_read(flash_dev, valid_write_addr, read_data, ARRAY_SIZE(read_data));
+	const struct device *flash_dev = device_get_binding(FLASH_DEV_NAME);
+
+	retval = flash_read(flash_dev, valid_write_addr, read_data_after,
+			    ARRAY_SIZE(read_data_after));
 	zassert_true(retval == 0, "flash_read failed");
-	for (size_t i = 0; i < ARRAY_SIZE(read_data); i++) {
-		zassert_equal(read_data[i], write_data[i],
-					  "Expected:%c got %c at positition %ld",
-					  write_data[i],
-					  read_data[i],
-					  i);
+	for (size_t i = 0; i < ARRAY_SIZE(read_data_after); i++) {
+		zassert_equal(read_data_after[i], write_data[i],
+			      "Expected:'%c' got '%c' at positition %ld",
+			      write_data[i], read_data_after[i], i);
 	}
-	retval = flash_read(flash_dev, 0x6032, read_data, ARRAY_SIZE(read_data));
-	for (size_t i = 0; i < ARRAY_SIZE(read_data); i++) {
-		zassert_not_equal(read_data[i], write_data[i],
-					  "Expected:%c should not be equal to %c at positition %ld",
-					  write_data[i],
-					  read_data[i],
-					  i);
+	retval = flash_read(flash_dev, control_read_addr, read_data_after,
+			    ARRAY_SIZE(read_data_after));
+	zassert_true(retval == 0, "flash_read failed");
+	for (size_t i = 0; i < ARRAY_SIZE(read_data_after); i++) {
+		zassert_equal(read_data_after[i], read_data_before[i],
+			      "Expected:'%c' got '%c' at positition %ld",
+			      read_data_before[i], read_data_after[i], i);
 	}
 }
 
 static void test_flash_read_protected(void)
 {
 	int retval;
-	u8_t rd[256];
-	struct device *flash_dev = device_get_binding(DT_FLASH_DEV_NAME);
+	uint8_t rd[256];
+	const struct device *flash_dev = device_get_binding(FLASH_DEV_NAME);
+
 	retval = flash_read(flash_dev, 0, rd, sizeof(rd));
 	zassert_true(retval == 0, "flash read to protected area failed");
 }
