@@ -11,7 +11,7 @@ Overview
 
 2) Register modem as a client for mobile-terminated SMS and status reports: `AT+CNMI`_\=3,2,0,1
 
-3) Send the message "Hello from Nordic" to +16464007658, SMSC = NULL: `AT+CMGS`_\=29\\r0001000B916164047056F8000012C8329BFD0699E5EF36C8F99693D3E310\\x1A
+3) Send the message "Hello from Nordic!" to +16464007658, SMSC = NULL: `AT+CMGS`_\=29\\r0001000B916164622635F5000012C8329BFD0699E5EF36C8F99693D3E310\\x1A
 
 .. _AT+CFUN: https://infocenter.nordicsemi.com/topic/ref_at_commands/REF/at_commands/mob_termination_ctrl_status/cfun_set.html
 .. _AT+CNMI: https://infocenter.nordicsemi.com/topic/ref_at_commands/REF/at_commands/text_mode/cnmi_set.html
@@ -33,4 +33,4 @@ This example can be run on the nRF9160 DK using the pre-built merged.hex file. M
 Notes
 *****
 - Payload for SMS can be changed by using the tool here: http://rednaxela.net/pdu.php
-- +16464007658 can be used for free on https://receive-smss.com/sms/16464007658/
+- +16462662535 can be used for free on https://receive-smss.com/sms/16462662535/ This service may be down from time to time or the number may become invalid so it is advised to use your own personal number.

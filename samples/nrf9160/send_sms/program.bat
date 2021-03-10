@@ -1,3 +1,3 @@
 nrfjprog -e
-west build -b nrf9160_pca10090ns
+west build -b nrf9160dk_nrf9160ns
 west flash

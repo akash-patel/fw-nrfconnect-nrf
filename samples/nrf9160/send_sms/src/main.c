@@ -7,7 +7,7 @@
 #include <net/socket.h>
 #include <stdio.h>
 #include <string.h>
-#include <uart.h>
+#include <drivers/uart.h>
 #include <zephyr.h>
 
 #define RECV_BUF_SIZE 1024
@@ -16,11 +16,11 @@ char recv_buf[RECV_BUF_SIZE + 1];
 
 const char *at_commands[] = {
 	"AT+CFUN?", "AT+CGMM", "AT+CNUM", "AT+CGDCONT?", "AT%XCBAND=?", "AT+CGSN=1", "AT+CGMR", 
-	"AT+CESQ", "AT+CNMI=3,2,0,1", "AT+CNMI?", "AT+CMGS=29\r0001000B916164047056F8000012C8329BFD0699E5EF36C8F99693D3E310\x1A", "AT+CGMR", 
+	"AT+CESQ", "AT+CNMI=3,2,0,1", "AT+CNMI?", "AT+CMGS=29\r0001000B916164622635F5000012C8329BFD0699E5EF36C8F99693D3E310\x1A", "AT+CGMR", 
 	/* Add more here if needed */
 };
 
-int blocking_recv(int fd, u8_t *buf, u32_t size, u32_t flags)
+int blocking_recv(int fd, uint8_t *buf, uint32_t size, uint32_t flags)
 {
 	int err;
 
@@ -31,7 +31,7 @@ int blocking_recv(int fd, u8_t *buf, u32_t size, u32_t flags)
 	return err;
 }
 
-int blocking_send(int fd, u8_t *buf, u32_t size, u32_t flags)
+int blocking_send(int fd, uint8_t *buf, uint32_t size, uint32_t flags)
 {
 	int err;
 
@@ -55,7 +55,7 @@ int blocking_connect(int fd, struct sockaddr *local_addr, socklen_t len)
 
 void app_socket_start(void)
 {
-	int at_socket_fd = socket(AF_LTE, 0, NPROTO_AT);
+	int at_socket_fd = socket(AF_LTE, SOCK_DGRAM, NPROTO_AT);
 
 	printk("Starting simple AT socket application\n\r");
 
