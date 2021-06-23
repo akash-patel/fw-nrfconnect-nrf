@@ -17,10 +17,12 @@
 #include "supl_support.h"
 #endif
 
+#define AT_XFACTORYRESET	"AT\%XFACTORYRESET=0" /* This command is only supported in mfw v1.3.x */
 #define AT_XSYSTEMMODE      "AT\%XSYSTEMMODE=1,0,1,0"
 #define AT_ACTIVATE_GPS     "AT+CFUN=31"
 #define AT_ACTIVATE_LTE     "AT+CFUN=21"
 #define AT_DEACTIVATE_LTE   "AT+CFUN=20"
+#define AT_XMODEMTRACE     	"AT\%XMODEMTRACE=1,2"
 
 #define GNSS_INIT_AND_START 1
 #define GNSS_STOP           2
@@ -49,11 +51,15 @@
 
 static const char update_indicator[] = {'\\', '|', '/', '-'};
 static const char *const at_commands[] = {
+	AT_XFACTORYRESET,
 	AT_XSYSTEMMODE,
 #if defined(CONFIG_BOARD_NRF9160DK_NRF9160NS) || \
 	defined(CONFIG_BOARD_THINGY91_NRF9160NS)
 	AT_MAGPIO,
 	AT_COEX0,
+#endif
+#if defined(CONFIG_NRF_MODEM_LIB_TRACE_ENABLED)
+	AT_XMODEMTRACE,
 #endif
 	AT_ACTIVATE_GPS
 };
