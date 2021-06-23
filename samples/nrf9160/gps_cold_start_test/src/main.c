@@ -17,7 +17,7 @@
 #include "supl_support.h"
 #endif
 
-#define AT_XFACTORYRESET	"AT\%XFACTORYRESET=0" /* This command is only supported in mfw v1.3.x */
+#define AT_XFACTORYRESET	"AT\%XFACTORYRESET=0" // This command is only supported in mfw v1.3.x
 #define AT_XSYSTEMMODE      "AT\%XSYSTEMMODE=1,0,1,0"
 #define AT_ACTIVATE_GPS     "AT+CFUN=31"
 #define AT_ACTIVATE_LTE     "AT+CFUN=21"
@@ -70,6 +70,7 @@ static uint32_t                 nmea_string_cnt;
 
 static bool                  got_fix;
 static uint64_t                 fix_timestamp;
+static uint64_t					ttff;
 static nrf_gnss_data_frame_t last_pvt;
 
 K_SEM_DEFINE(lte_ready, 0, 1);
@@ -319,6 +320,7 @@ int process_gps_data(nrf_gnss_data_frame_t *gps_data)
 					& NRF_GNSS_PVT_FLAG_FIX_VALID_BIT) {
 
 				got_fix = true;
+				ttff = (k_uptime_get() - fix_timestamp) / 1000;
 				fix_timestamp = k_uptime_get();
 			}
 			break;
@@ -348,7 +350,10 @@ int process_gps_data(nrf_gnss_data_frame_t *gps_data)
 			}
 			activate_lte(false);
 			gnss_ctrl(GNSS_RESTART);
-			k_msleep(2000);
+			// k_msleep(2000); // Not needed
+			
+			// Reset fix_timestamp so the TTFF timer starts after A-GPS data is acquired
+			fix_timestamp = k_uptime_get(); 
 #endif
 			break;
 
@@ -444,6 +449,7 @@ int main(void)
 				       update_indicator[cnt%4]);
 			} else {
 				print_fix_data(&last_pvt);
+				printk("\nTime to get fix: %lld\n", ttff);
 			}
 
 			printk("\nNMEA strings:\n\n");
