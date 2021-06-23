@@ -149,6 +149,7 @@ static int gnss_ctrl(uint32_t ctrl)
 					       NRF_GNSS_NMEA_GLL_MASK |
 					       NRF_GNSS_NMEA_GGA_MASK |
 					       NRF_GNSS_NMEA_RMC_MASK;
+	nrf_gnss_use_case_t		use_case 	= NRF_GNSS_USE_CASE_SINGLE_COLD_START;
 
 	if (ctrl == GNSS_INIT_AND_START) {
 		gnss_fd = nrf_socket(NRF_AF_LOCAL,
@@ -189,6 +190,16 @@ static int gnss_ctrl(uint32_t ctrl)
 					sizeof(nmea_mask));
 		if (retval != 0) {
 			printk("Failed to set nmea mask\n");
+			return -1;
+		}
+
+		retval = nrf_setsockopt(gnss_fd,
+					NRF_SOL_GNSS,
+					NRF_SO_GNSS_USE_CASE,
+					&use_case,
+					sizeof(use_case));
+		if (retval != 0) {
+			printk("Failed to set use case\n");
 			return -1;
 		}
 	}
@@ -351,7 +362,7 @@ int process_gps_data(nrf_gnss_data_frame_t *gps_data)
 			activate_lte(false);
 			gnss_ctrl(GNSS_RESTART);
 			// k_msleep(2000); // Not needed
-			
+
 			// Reset fix_timestamp so the TTFF timer starts after A-GPS data is acquired
 			fix_timestamp = k_uptime_get(); 
 #endif
