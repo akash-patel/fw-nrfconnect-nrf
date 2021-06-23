@@ -142,8 +142,8 @@ static int gnss_ctrl(uint32_t ctrl)
 	int retval;
 
 	nrf_gnss_fix_retry_t    fix_retry    = 0;
-	nrf_gnss_fix_interval_t fix_interval = 1;
-	nrf_gnss_delete_mask_t	delete_mask  = 0;
+	nrf_gnss_fix_interval_t fix_interval = 0; // Attempt a single fix
+	nrf_gnss_delete_mask_t	delete_mask; // Delete masks set individually below
 	nrf_gnss_nmea_mask_t	nmea_mask    = NRF_GNSS_NMEA_GSV_MASK |
 					       NRF_GNSS_NMEA_GSA_MASK |
 					       NRF_GNSS_NMEA_GLL_MASK |
@@ -204,8 +204,27 @@ static int gnss_ctrl(uint32_t ctrl)
 		}
 	}
 
-	if ((ctrl == GNSS_INIT_AND_START) ||
-	    (ctrl == GNSS_RESTART)) {
+	/* Separated GNSS_INIT_AND_START and GNSS_RESTART into 2 sections. GNSS_INIT_AND_START will still
+	 * run first before A-GPS to clear existing data and then after A-GPS data is injected,
+	 * GNSS_RESTART will start GPS without deleting injected data. GNSS_STOP will take care of clearing
+	 * data before attempting the next fix with GNSS_RESTART.
+	 */
+
+	if (ctrl == GNSS_INIT_AND_START) {
+		delete_mask = 0x7f; // First start deletes everything but TCXO
+		retval = nrf_setsockopt(gnss_fd,
+					NRF_SOL_GNSS,
+					NRF_SO_GNSS_START,
+					&delete_mask,
+					sizeof(delete_mask));
+		if (retval != 0) {
+			printk("Failed to start GPS\n");
+			return -1;
+		}
+	}
+
+	if (ctrl == GNSS_RESTART) {
+		delete_mask = 0x00; // Restart deletes nothing
 		retval = nrf_setsockopt(gnss_fd,
 					NRF_SOL_GNSS,
 					NRF_SO_GNSS_START,
@@ -218,6 +237,7 @@ static int gnss_ctrl(uint32_t ctrl)
 	}
 
 	if (ctrl == GNSS_STOP) {
+		delete_mask = 0x7f; // Stop deletes everything but TCXO
 		retval = nrf_setsockopt(gnss_fd,
 					NRF_SOL_GNSS,
 					NRF_SO_GNSS_STOP,
