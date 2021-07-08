@@ -15,6 +15,7 @@
 #include <supl_os_client.h>
 #include <supl_session.h>
 #include "supl_support.h"
+#include <math.h> // used for pow function
 #endif
 
 #define AT_XFACTORYRESET	"AT\%XFACTORYRESET=0" // This command is only supported in mfw v1.3.x
@@ -72,6 +73,11 @@ static bool                  got_fix;
 static uint64_t                 fix_timestamp;
 static uint64_t					ttff;
 static nrf_gnss_data_frame_t last_pvt;
+
+#ifdef CONFIG_SUPL_CLIENT_LIB
+static double init_inj_lat;
+static double init_inj_long;
+#endif
 
 K_SEM_DEFINE(lte_ready, 0, 1);
 
@@ -319,6 +325,9 @@ static void print_fix_data(nrf_gnss_data_frame_t *pvt_data)
 	printk("Time (UTC): %02u:%02u:%02u\n", pvt_data->pvt.datetime.hour,
 					       pvt_data->pvt.datetime.minute,
 					      pvt_data->pvt.datetime.seconds);
+	#ifdef CONFIG_SUPL_CLIENT_LIB
+		printf("Initially injected location: %3.8f, %3.8f \n", init_inj_lat, init_inj_long);
+	#endif
 	printf("Fix location: %3.8f, %3.8f \n", pvt_data->pvt.latitude, pvt_data->pvt.longitude);
 }
 
@@ -404,6 +413,30 @@ int inject_agps_type(void *agps,
 		     void *user_data)
 {
 	ARG_UNUSED(user_data);
+
+	if (type == NRF_GNSS_AGPS_LOCATION) {
+		/* Dump location data */
+		nrf_gnss_agps_data_location_t *loc = agps;
+		printk("latitude: %d\n", loc->latitude);
+		printk("longitude: %d\n", loc->longitude);
+		printk("altitude: %d\n", loc->altitude);
+		printk("unc_semimajor: %u\n", loc->unc_semimajor);
+		printk("unc_semiminor: %u\n", loc->unc_semiminor);
+		printk("orientation_major: %u\n", loc->orientation_major);
+		printk("unc_altitude: %u\n", loc->unc_altitude);
+		printk("confidence: %u\n", loc->confidence);
+
+		double tmp1 = pow(2,23);
+		double tmp2 = tmp1/90;
+		init_inj_lat = loc->latitude/tmp2;
+
+		tmp1 = pow(2,24);
+		tmp2 = tmp1/360;
+		init_inj_long = loc->longitude/tmp2;
+
+		printf("Initially injected location: %3.8f, %3.8f \n", init_inj_lat, init_inj_long);
+	}
+
 	int retval = nrf_sendto(gnss_fd,
 				agps,
 				agps_size,
