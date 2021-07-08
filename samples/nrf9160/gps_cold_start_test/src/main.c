@@ -319,6 +319,7 @@ static void print_fix_data(nrf_gnss_data_frame_t *pvt_data)
 	printk("Time (UTC): %02u:%02u:%02u\n", pvt_data->pvt.datetime.hour,
 					       pvt_data->pvt.datetime.minute,
 					      pvt_data->pvt.datetime.seconds);
+	printf("Fix location: %3.8f, %3.8f \n", pvt_data->pvt.latitude, pvt_data->pvt.longitude);
 }
 
 static void print_nmea_data(void)
@@ -480,7 +481,15 @@ int main(void)
 				       update_indicator[cnt%4]);
 			} else {
 				print_fix_data(&last_pvt);
-				printk("\nTime to get fix: %lld\n", ttff);
+				printk("\nTime to get fix: %lld seconds\n", ttff);
+				printk("---------------------------------");
+				printk("\nNMEA strings for GPS fix:\n\n");
+				print_nmea_data();
+				
+				// wait here after getting a fix
+				while (got_fix) {
+					k_msleep(500);
+				}
 			}
 
 			printk("\nNMEA strings:\n\n");
