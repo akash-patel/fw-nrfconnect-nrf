@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <modem/at_cmd.h>
 #include <modem/at_notif.h>
+#include <dk_buttons_and_leds.h>
 
 #ifdef CONFIG_SUPL_CLIENT_LIB
 #include <supl_os_client.h>
@@ -258,9 +259,22 @@ static int gnss_ctrl(uint32_t ctrl)
 	return 0;
 }
 
+static void button_handler(uint32_t button_states, uint32_t has_changed)
+{
+	if (has_changed & button_states & DK_BTN1_MSK) {
+		got_fix = false;
+	}
+}
+
 static int init_app(void)
 {
 	int retval;
+
+	retval = dk_buttons_init(button_handler);
+	if (retval != 0) {
+		printk("dk_buttons_init, error: %d", retval);
+		return -1;
+	}
 
 	if (setup_modem() != 0) {
 		printk("Failed to initialize modem\n");
@@ -470,6 +484,13 @@ int main(void)
 		.logger     = supl_logger,
 		.counter_ms = k_uptime_get
 	};
+
+	//AGPS data frame to request all data
+	static nrf_gnss_agps_data_frame_t agps_data = {
+		0xffffffff, // ephe
+		0xffffffff, // alm
+		0x3b // flags
+	};
 #endif
 
 	printk("Starting GPS application\n");
@@ -518,11 +539,31 @@ int main(void)
 				printk("---------------------------------");
 				printk("\nNMEA strings for GPS fix:\n\n");
 				print_nmea_data();
+
+				printk("\nPress Button 1 to attempt another fix.\n");
+				gnss_ctrl(GNSS_STOP);
 				
-				// wait here after getting a fix
+				// wait here for user to press button 1 to attempt another a fix
 				while (got_fix) {
 					k_msleep(500);
 				}
+#ifdef CONFIG_SUPL_CLIENT_LIB
+				/* Fetch APGS data and start next round */
+				printk("Establishing LTE link...\n");
+				activate_lte(true);
+				printk("Established LTE link\n");
+				if (open_supl_socket() == 0) {
+					printf("Starting SUPL session\n");
+					supl_session(&agps_data);
+					printk("Done\n");
+					close_supl_socket();
+				}
+				activate_lte(false);
+#endif
+				got_fix = false;
+				fix_timestamp = k_uptime_get();
+				gnss_ctrl(GNSS_RESTART);
+				continue;
 			}
 
 			printk("\nNMEA strings:\n\n");
