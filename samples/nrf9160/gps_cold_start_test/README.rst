@@ -1,167 +1,281 @@
-.. _gps_with_supl_support_sample:
-
-nRF9160: GPS sockets and SUPL client library
-############################################
+nRF9160: GPS Cold Start Testing (Modified Example)
+##################################################
 
 .. contents::
    :local:
    :depth: 2
 
-The GPS sample demonstrates how to retrieve `GPS`_ data.
-If Secure User-Plane Location (SUPL) support is enabled, it also shows how to improve the GPS fix accuracy and fix speed with `A-GPS`_ data from a SUPL server.
-See :ref:`supl_client` for information on enabling SUPL support for the sample.
+Overview and Motivation
+***********************
 
-The sample first creates a `GNSS`_ socket.
-Then it reads the GPS data from the socket and parses the received frames to interpret the frame contents.
-See :ref:`nrfxlib:gnss_extension` for more information.
+This example has been modified from the "gps" example to emulate and facilitate cold start testing.
+Rather than waiting for GPS data to become invalid over time, this example will clear GPS data in the modem before attempting another fix.
+Once a fix is achieved, a new fix can be attempted through a button press.
+This example can work either with or without SUPL. 
 
-Overview
-********
+Changes from Default Example
+****************************
 
-This sample operates in two different modes.
+* Enables modem trace
+* Measures TTFF (Time To First Fix)
+* Adds button 1 support to attempt another fix
+* Clears all GPS data (except TCXO offset) in the modem prior to attempting a fix
+* Print injected location from SUPL
 
-In the default mode, the sample displays information from both PVT (Position, Velocity, and Time) and `NMEA`_ strings.
-The sample can also be configured to run in NMEA-only mode, where only the NMEA strings are displayed in the console.
-The NMEA-only mode can be used to visualize the data from the GPS using a third-party tool.
-
-SUPL support can be enabled for both the default mode (PVT and NMEA) and the NMEA-only mode.
-When the SUPL support is enabled, the sample receives an A-GPS data request notification from the GPS module, and it starts downloading the A-GPS data requested by the GPS module.
-The sample then displays the information in the terminal about the download process.
-Finally, after the download completes, the sample switches back to the previous display mode.
-
-Requirements
-************
-
-The sample supports the following development kit:
-
-.. table-from-rows:: /includes/sample_board_rows.txt
-   :header: heading
-   :rows: nrf9160dk_nrf9160ns
-
-The sample can be optionally used with the SUPL Client library (for details on download, see :ref:`supl_client`).
-
-.. include:: /includes/spm.txt
+The default "gps" example was used as the base for this example so you can see the changes from the example by going through the commits.
 
 Building and running
 ********************
 
-.. |sample path| replace:: :file:`samples/nrf9160/gps`
+This example should be built similarly as mentioned in the "gps" example.
 
-.. include:: /includes/build_and_run_nrf9160.txt
+Usage
+=====
 
-Using the sample with the SUPL client library
-=============================================
+Upon boot up, it will start to look for a fix and continue until a fix is achieved.
+After a fix, it will prompt the user to press button 1 to attempt another fix.
 
-If the sample is to be used with the SUPL client library, the library must be downloaded and enabled in the sample configuration.
-You can download it from the `Nordic Semiconductor website`_.
-See :ref:`supl_client` for information on installing and enabling the SUPL client library.
 
-The SUPL client library is not required, and the sample will work without `A-GPS`_ support if the library is not available.
+Sample output (without A-GPS)
+=============================
 
-Testing
-=======
+When booting up, you should see the following printout.
 
-After programming the sample and all the prerequisites to the development kit, you can test the sample by performing the following steps:
+.. code-block:: console
 
-1. Connect your nRF9160 DK to the PC using a USB cable and power on or reset your nRF9160 DK.
-2. Open a terminal emulator.
-#. Test the sample by performing the following steps:
+   *** Booting Zephyr OS build v2.4.99-ncs1  ***
+   Starting GPS application
+   GPS Socket created
+   Getting GPS data...
+   Tracking: 0 Using: 0 Unhealthy: 0
+   ---------------------------------
+   Seconds since last fix: 0
+   Searching [/]
 
-   If the default mode is enabled:
+   NMEA strings:
 
-   a. Observe that the following information is displayed in the terminal emulator:
+   ---------------------------------
 
-          .. code-block:: console
+Several seconds later:
 
-                Tracking: 0 Using: 0 Unhealthy: 0
-                ---------------------------------
-                Seconds since last fix: 1
-                Searching [-]
+.. code-block:: console
 
-                NMEA strings:
+   Tracking: 7 Using: 0 Unhealthy: 0
+   ---------------------------------
+   Seconds since last fix: 10
+   Searching [/]
 
-                $GPGGA,000000.00,,,,,0,,99.99,,M,0,,*37
-                $GPGLL,,,,,000000.00,V,A*45
-                $GPGSA,A,1,,,,,,,,,,,,,99.99,99.99,99.99,1*2D
-                $GPGSV,1,1,0,,,,,,,,,,,,,,,,,1*54
-                $GPRMC,000000.00,V,,,,,,,060180,,,N,V*08
-                ---------------------------------
+   NMEA strings:
 
-   #. Observe that the numbers associated with the displayed parameters **Tracking** and **Using** change.
-   #. Observe that the sample displays the following information upon acquiring the GPS lock:
+   $GPGGA,000010.43,,,,,0,,99.99,,M,,M,,*60
+   $GPGLL,,,,,000010.43,V,N*4C
+   $GPGSA,A,1,,,,,,,,,,,,,99.99,99.99,99.99,1*2D
+   $GPGSV,2,1,7,2,,,39,5,,,44,12,,,43,18,,,40,1*54
+   $GPGSV,2,2,7,20,,,10,25,,,45,29,,,43,1*5A
+   $GPRMC,000010.43,V,,,,,,,060180,,,N,V*0E
+   ---------------------------------
+   
+Once the fix is realized (typically 25 - 40 seconds in good conditions):
 
-          .. code-block:: console
+.. code-block:: console
 
-                Tracking: 7 Using: 5 Unhealthy: 0
-                ---------------------------------
-                Longitude:  23.771611
-                Latitude:   61.491275
-                Altitude:   116.274658
-                Speed:      0.039595
-                Heading:    0.000000
-                Date:       2020-03-06
-                Time (UTC): 05:48:24
+   Tracking: 12 Using: 5 Unhealthy: 0
+   ---------------------------------
+   Longitude:  -121.999802
+   Latitude:   37.321312
+   Altitude:   39.332546
+   Speed:      0.273315
+   Heading:    0.000000
+   Date:       2021-07-08
+   Time (UTC): 19:35:30
+   Fix location: 37.32131157, -121.99980177
 
-                NMEA strings:
+   Time to get fix: 27 seconds
+   ---------------------------------
+   NMEA strings for GPS fix:
 
-                $GPGGA,054824.58,6128.77008,N,02351.48387,E,1,07,2.05,116.27,M,0,,*22
-                $GPGLL,6129.28608,N,02346.17887,E,054824.58,A,A*6B
-                $GPGSA,A,3,10,12,17,24,28,,,,,,,,3.05,2.05,2.25,1*13
-                $GPGSV,2,1,7,17,50,083,41,24,68,250,38,10,14,294,46,28,23,071,38,1*56
-                $GPGSV,2,2,7,12,29,240,36,19,00,000,32,1,00,000,33,1*50
-                $GPRMC,054824.58,A,6129.28608,N,02346.17887,E,0.08,0.00,030620,,,A,V*29
-                ---------------------------------
+   $GPGGA,193530.37,3719.27869,N,12159.98811,W,1,05,1.93,39.33,M,,M,,*54
+   $GPGLL,3719.27869,N,12159.98811,W,193530.37,A,A*7B
+   $GPGSA,A,3,02,05,12,25,29,,,,,,,,3.68,1.93,3.13,1*10
+   $GPGSV,3,1,12,2,22,057,35,5,62,106,43,9,,,28,10,,,26,1*54
+   $GPGSV,3,2,12,12,35,165,41,13,,,25,18,,,36,21,,,26,1*5A
+   $GPGSV,3,3,12,25,61,206,43,26,,,26,29,60,332,41,32,,,25,1*68
+   $GPRMC,193530.37,A,3719.27869,N,12159.98811,W,0.53,0.00,080721,,,A,V*3C
 
-   If NMEA-only mode is enabled:
+   Press Button 1 to attempt another fix.
+   
+Sample output (with A-GPS)
+==========================
 
-   a. Observe that the following information is displayed in the terminal emulator:
+When booting up, you should see the following printout (extra empty lines have been removed to improve readability).
 
-          .. code-block:: console
+.. code-block:: console
 
-                $GPGGA,000000.00,,,,,0,,99.99,,M,0,,*37
-                $GPGLL,,,,,000000.00,V,A*45
-                $GPGSA,A,1,,,,,,,,,,,,,99.99,99.99,99.99,1*2D
-                $GPGSV,1,1,0,,,,,,,,,,,,,,,,,1*54
-                $GPRMC,000000.00,V,,,,,,,060180,,,N,V*08
-                $GPGGA,000001.00,,,,,0,02,99.99,,M,0,,*34
-                $GPGLL,,,,,000001.00,V,A*44
-                $GPGSA,A,1,,,,,,,,,,,,,99.99,99.99,99.99,1*2D
-                $GPGSV,1,1,2,17,,,24,1,,,28,1*6D
-                $GPRMC,000001.00,V,,,,,,,060180,,,N,V*09
-                $GPGGA,000002.00,,,,,0,02,99.99,,M,0,,*37
-                $GPGLL,,,,,000002.00,V,A*47
-                $GPGSA,A,1,,,,,,,,,,,,,99.99,99.99,99.99,1*2D
-                $GPGSV,1,1,2,17,,,24,1,,,28,1*6D
-                $GPRMC,000002.00,V,,,,,,,060180,,,N,V*0A
+   *** Booting Zephyr OS build v2.4.99-ncs1  ***
+   Starting GPS application
+   GPS Socket created
+   Getting GPS data...
 
-   If SUPL client library support is enabled:
+   Tracking: 0 Using: 0 Unhealthy: 0
+   ---------------------------------
+   Seconds since last fix: 0
+   Searching [|]
 
-   a. Observe that the following message is displayed in the terminal emulator immediately after the device boots:
+   NMEA strings:
 
-           .. code-block:: console
+   ---------------------------------
 
-              New AGPS data requested, contacting SUPL server, flags 59.
+   New AGPS data requested, contacting SUPL server, flags 59
+   Established LTE link
+   ip 8efb:2c0:200:d801:1300:1300:: (c002fb8e) port 7276
+   Starting SUPL session
+   ULP encoding length: 39
+   Bytes sent: 39
+   Bytes received: 34, total 34
+   ULP ossDecode success, choice 3
+   SUPL server responded using version 2.0.4
+   SUPL response received
+   ULP encoding length: 58
+   Bytes sent: 58
+   Bytes received: 708, total 708
+   ULP ossDecode more input 4
+   Bytes received: 2346, total 3054
+   ULP ossDecode success, choice 5
+   Injected AGPS data, flags: 1, size: 16
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 2, size: 72
+   Injected AGPS data, flags: 3, size: 32
+   Injected AGPS data, flags: 3, size: 32
+   Injected AGPS data, flags: 3, size: 32
+   Injected AGPS data, flags: 3, size: 32
+   Injected AGPS data, flags: 3, size: 32
+   Injected AGPS data, flags: 3, size: 32
+   Injected AGPS data, flags: 3, size: 32
+   Injected AGPS data, flags: 3, size: 32
+   Injected AGPS data, flags: 3, size: 32
+   Injected AGPS data, flags: 3, size: 32
+   Injected AGPS data, flags: 3, size: 32
+   Injected AGPS data, flags: 3, size: 32
+   Injected AGPS data, flags: 3, size: 32
+   Injected AGPS data, flags: 3, size: 32
+   Injected AGPS data, flags: 3, size: 32
+   Injected AGPS data, flags: 3, size: 32
+   Injected AGPS data, flags: 3, size: 32
+   Injected AGPS data, flags: 3, size: 32
+   Injected AGPS data, flags: 3, size: 32
+   Injected AGPS data, flags: 3, size: 32
+   Injected AGPS data, flags: 3, size: 32
+   Injected AGPS data, flags: 3, size: 32
+   Injected AGPS data, flags: 3, size: 32
+   Injected AGPS data, flags: 3, size: 32
+   Injected AGPS data, flags: 3, size: 32
+   Injected AGPS data, flags: 3, size: 32
+   Injected AGPS data, flags: 3, size: 32
+   Injected AGPS data, flags: 3, size: 32
+   Injected AGPS data, flags: 3, size: 32
+   Injected AGPS data, flags: 3, size: 32
+   No integrity data available
+   Injected AGPS data, flags: 4, size: 8
+   Injected AGPS data, flags: 6, size: 144
+   latitude: 3478175
+   longitude: -5685508
+   altitude: 0
+   unc_semimajor: 49
+   unc_semiminor: 49
+   orientation_major: 0
+   unc_altitude: 127
+   confidence: 68
+   Initially injected location: 37.31676936, -121.99776649
+   Injected AGPS data, flags: 7, size: 16
+   SUPL POS received
+   read again
+   Bytes received: 34, total 34
+   ULP ossDecode success, choice 6
+   SUPLEND:
+           Mask: 0
+           Status: 0
+   SUPL END received
+   SUPL session internal resources released
+   SUPL session finished
+   Done
 
-   b. Observe the following actions in the terminal emulator:
+   Tracking: 0 Using: 0 Unhealthy: 0
+   ---------------------------------
+   Seconds since last fix: 0
+   Searching [/]
 
-      i. The sample switches to LTE and connects to a SUPL server.
-      #. The A-GPS data gets downloaded.
-      #. The sample continues after the SUPL session is complete.
+   NMEA strings:
 
-Dependencies
-************
+   ---------------------------------
 
-This sample uses the following |NCS| libraries:
+Once the fix is realized (typically 1 - 2 seconds in good conditions):
 
-* :ref:`secure_partition_manager`
-* :ref:`at_cmd_readme`
-* :ref:`at_notif_readme`
-* :ref:`supl_client`
+.. code-block:: console
 
-It uses the following `sdk-nrfxlib`_ library:
+   Tracking: 6 Using: 6 Unhealthy: 0
+   ---------------------------------
+   Longitude:  -121.999876
+   Latitude:   37.321304
+   Altitude:   32.800102
+   Speed:      0.146501
+   Heading:    0.000000
+   Date:       2021-07-08
+   Time (UTC): 19:40:00
+   Initially injected location: 37.31676936, -121.99776649
+   Fix location: 37.32130364, -121.99987577
 
-* :ref:`nrfxlib:nrf_modem`
+   Time to get fix: 1 seconds
+   ---------------------------------
+   NMEA strings for GPS fix:
 
-It uses the following Zephyr library:
+   $GPGGA,194000.97,3719.27822,N,12159.99255,W,1,06,1.41,32.80,M,,M,,*54
+   $GPGLL,3719.27822,N,12159.99255,W,194000.97,A,A*74
+   $GPGSA,A,3,05,12,18,20,25,29,,,,,,,3.56,1.41,3.26,1*1D
+   $GPGSV,4,1,13,2,20,058,,5,62,101,46,11,14,056,,12,33,165,46,1*68
+   $GPGSV,4,2,13,13,00,118,,15,05,149,,18,33,255,42,20,46,059,43,1*61
+   $GPGSV,4,3,13,23,05,201,,25,59,204,46,26,09,321,,29,61,335,44,1*6D
+   $GPGSV,4,4,13,31,11,285,,1*5B
+   $GPRMC,194000.97,A,3719.27822,N,12159.99255,W,0.28,0.00,080721,,,A,V*3F
 
-* :ref:`net_socket_offloading`
+   Press Button 1 to attempt another fix.
+
+Notes
+*****
+
+* An external antenna (instead of the on-board antenna) can be used with this example by adding **CONFIG_GPS_SAMPLE_ANTENNA_EXTERNAL=y** to the prj.conf file. This will disable the LNA going to the on-board antenna.
+* For best results, use modem firmware v1.3.0 as that introduces GPS improvements
+
+Future Work
+***********
+
+* Migration to NCS v1.6.0 with new GPS API
